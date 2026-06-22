@@ -176,9 +176,9 @@ export const tools: ToolDef[] = [
     name: 'apifox_import_openapi',
     description:
       '导入 OpenAPI/Swagger 数据到项目(支持 JSON 或 YAML 字符串)。' +
-      '推荐用于创建/更新带数据模型的接口:在 spec 的 components.schemas 中定义数据模型,' +
-      'paths 里用 $ref 引用,一次导入即可创建数据模型并让接口引用它们' +
-      '(personal token 下这是创建数据模型的唯一可行方式)。',
+      '可创建/更新接口与数据模型:在 spec 的 components.schemas 定义模型、paths 用 $ref 引用。' +
+      '改已有数据模型字段:传 schemaOverwriteMode="name" 覆盖更新同名模型(改 required/描述/属性);' +
+      '改已有接口:传 apiOverwriteMode="methodAndPath"。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -186,13 +186,28 @@ export const tools: ToolDef[] = [
           type: 'string',
           description:
             'OpenAPI/Swagger 规范内容(JSON 或 YAML 字符串)。' +
-            '含 components.schemas 时会创建对应数据模型,paths 用 $ref 引用',
+            '含 components.schemas 时会创建/覆盖对应数据模型,paths 用 $ref 引用',
+        },
+        schemaOverwriteMode: {
+          type: 'string',
+          enum: ['ignore', 'name', 'nameAndFolder', 'merge'],
+          description: '数据模型同名处理,默认 ignore;覆盖更新已有模型字段用 "name"',
+        },
+        apiOverwriteMode: {
+          type: 'string',
+          enum: ['ignore', 'methodAndPath', 'methodAndPathAndFolder', 'merge'],
+          description: '接口同名处理,默认 ignore;覆盖更新已有接口用 "methodAndPath"',
         },
         projectId: projectIdProp,
       },
       required: ['spec'],
     },
-    handler: (apifox, args) => apifox.importExport.importOpenAPI(toJsonSpec(args.spec), { projectId: args.projectId }),
+    handler: (apifox, args) =>
+      apifox.importExport.importOpenAPI(toJsonSpec(args.spec), {
+        projectId: args.projectId,
+        schemaOverwriteMode: args.schemaOverwriteMode,
+        apiOverwriteMode: args.apiOverwriteMode,
+      }),
   },
   {
     name: 'apifox_export_openapi',

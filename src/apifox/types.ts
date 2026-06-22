@@ -47,6 +47,9 @@ export interface ImportSummary {
   endpointCreateCount: number;
   endpointUpdateCount: number;
   folderCreateCount: number;
+  /** 数据模型创建/更新数量(覆盖更新模型时 schemaUpdateCount > 0) */
+  schemaCreateCount: number;
+  schemaUpdateCount: number;
 }
 
 /** 接口创建/更新入参 */

@@ -95,4 +95,19 @@ describe('ImportExportService.importOpenAPI 统计校验', () => {
     });
     await expect(svc.importOpenAPI('{}')).rejects.toThrowError(ApifoxError);
   });
+
+  it('schemaOverwriteMode 透传,且仅模型更新也算成功', async () => {
+    let body: any;
+    const fake = {
+      request: async (c: AxiosRequestConfig) => {
+        body = c.data;
+        return { status: 200, data: { data: { schemaCollection: { item: { createCount: 0, updateCount: 1 } } } } };
+      },
+    } as unknown as AxiosInstance;
+    const svc = new ImportExportService(new HttpClient(cfg, fake));
+    const s = await svc.importOpenAPI('{}', { schemaOverwriteMode: 'name', apiOverwriteMode: 'methodAndPath' });
+    expect(body.schemaOverwriteMode).toBe('name');
+    expect(body.apiOverwriteMode).toBe('methodAndPath');
+    expect(s.schemaUpdateCount).toBe(1);
+  });
 });

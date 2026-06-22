@@ -41,14 +41,17 @@ switching and read/write/import capabilities. Based on the Apifox API.
 
 ## 数据模型(data schema)工作流
 
-数据模型端点对 personal token 的开放程度:**`GET /data-schemas` 可读(`list_schemas`),
-但所有写端点(`POST`/`PUT`/`PATCH`/`DELETE /data-schemas`)返回 302 不可用**。因此:
+数据模型的 `data-schemas` 写端点(`POST`/`PUT`/`PATCH`/`DELETE`)对 personal token 返回 302,
+但**读和"改/建"都能通过可用端点完成**:
 
-- **读**:用 `apifox_list_schemas` 列出项目数据模型(id/name/jsonSchema/folderId 等)。
-- **建**:唯一方式是 `import_openapi`——在 `components.schemas` 定义模型、`paths` 用 `$ref`
-  引用,一次导入即创建模型并让接口引用它们。
-- **改 / 删**:token 不开放(302),需在 Apifox UI 操作;import 重导同名模型默认会被
-  忽略(`ignore`),不会覆盖更新。
+- **读**:`apifox_list_schemas`(`GET /data-schemas`)列出项目数据模型(id/name/jsonSchema 等)。
+- **建**:`import_openapi`——在 `components.schemas` 定义模型、`paths` 用 `$ref` 引用,一次导入即创建模型并让接口引用。
+- **改字段(required/描述/属性)**:`import_openapi` 重导同名模型并传
+  **`schemaOverwriteMode: "name"`**,即按模型名覆盖更新(默认 `ignore` 不覆盖,这是关键参数)。
+  同理改已有接口用 `apiOverwriteMode: "methodAndPath"`。
+- **删**:仍需在 Apifox UI 操作(删除端点 302)。
+
+> `schemaOverwriteMode` 可选值:`ignore`(默认)/ `name` / `nameAndFolder` / `merge`。
 
 ```jsonc
 apifox_import_openapi({
@@ -75,8 +78,8 @@ apifox_import_openapi({
 // 导入后:数据模型 UserReq / UserResp 被创建,接口 /user/create 引用它们
 ```
 
-> 注意:数据模型与目录一样**建得了但无法经 API 删除/单独修改**(对应端点 302),
-> 删除需在 Apifox UI 操作;覆盖更新可通过再次 import 同名模型。
+> 注意:数据模型**可改字段**(`import_openapi` + `schemaOverwriteMode:"name"`),但**无法经 API 删除**
+> (删除端点 302),删除需在 Apifox UI 操作。
 
 ## 多项目支持
 
@@ -106,8 +109,8 @@ apifox_find_folder({ projectId: 7834388, moduleName: "KAZ-PDP -接口", folderNa
 - **目录无法通过 API 创建/删除**:`/api-tree-folders` 返回 302。`list_folders`/`find_folder`
   通过 `export-openapi` + `http-apis` 关联重建目录信息;要新建目录,请用 `import_openapi`
   导入带 tag 的接口,Apifox 会按 tag 自动建目录。
-- **数据模型(schema)只读**:`GET /data-schemas` 可读(`list_schemas`),但写端点
-  (POST/PUT/PATCH/DELETE)返回 302。创建走 `import_openapi`,改/删需在 Apifox UI。
+- **数据模型(schema)读 + 建/改**:`GET /data-schemas` 可读(`list_schemas`);创建与改字段
+  通过 `import_openapi`(改字段用 `schemaOverwriteMode:"name"`)。仅**删除**需在 Apifox UI(端点 302)。
 - **失效端点不再静默**:底层 HTTP 客户端会把 302 重定向与 200 空 body 识别为"端点不可用"
   并抛出明确错误,避免旧实现里"假成功"的问题。
 
