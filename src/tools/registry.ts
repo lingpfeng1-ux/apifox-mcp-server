@@ -1,0 +1,196 @@
+/**
+ * 工具注册表:集中定义所有 MCP 工具的 schema 与 handler。
+ * handler 是薄封装:解析参数 -> 调能力层 -> 返回原始数据(由 server 统一包装)。
+ */
+
+import { Apifox } from '../apifox';
+import * as yaml from 'yaml';
+
+export interface ToolDef {
+  name: string;
+  description: string;
+  inputSchema: Record<string, any>;
+  handler: (apifox: Apifox, args: Record<string, any>) => Promise<unknown>;
+}
+
+// 可选 projectId:覆盖默认项目
+const projectIdProp = {
+  type: ['string', 'number'],
+  description: '项目 ID,可选。覆盖启动参数 --project / 环境变量 APIFOX_PROJECT_ID 指定的默认项目',
+};
+
+export const tools: ToolDef[] = [
+  {
+    name: 'apifox_get_project',
+    description: '获取 Apifox 项目详情',
+    inputSchema: { type: 'object', properties: { projectId: projectIdProp } },
+    handler: (apifox, args) => apifox.projects.getProject(args.projectId),
+  },
+  {
+    name: 'apifox_list_modules',
+    description: '获取项目下的模块列表',
+    inputSchema: { type: 'object', properties: { projectId: projectIdProp } },
+    handler: (apifox, args) => apifox.projects.listModules(args.projectId),
+  },
+  {
+    name: 'apifox_list_folders',
+    description: '列出指定模块下的所有目录(返回 moduleId / folderId / folderName / folderPath)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        moduleName: { type: 'string', description: '模块名称,如 "KAZ-PDP -接口"' },
+        projectId: projectIdProp,
+      },
+      required: ['moduleName'],
+    },
+    handler: (apifox, args) => apifox.folders.listFolders(args.moduleName, args.projectId),
+  },
+  {
+    name: 'apifox_find_folder',
+    description: '根据模块名 + 目录名定位 moduleId 与 folderId',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        moduleName: { type: 'string', description: '模块名称,如 "KAZ-PDP -接口"' },
+        folderName: { type: 'string', description: '目录名称,如 "Client-Image"' },
+        projectId: projectIdProp,
+      },
+      required: ['moduleName', 'folderName'],
+    },
+    handler: (apifox, args) => apifox.folders.findFolder(args.moduleName, args.folderName, args.projectId),
+  },
+  {
+    name: 'apifox_list_endpoints',
+    description: '获取接口列表,可按模块过滤',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        moduleId: { type: ['string', 'number'], description: '模块 ID,可选。模块化项目建议指定' },
+        projectId: projectIdProp,
+      },
+    },
+    handler: (apifox, args) => apifox.endpoints.list(args.projectId, args.moduleId),
+  },
+  {
+    name: 'apifox_get_endpoint',
+    description: '获取指定接口详情',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        apiId: { type: 'number', description: '接口 ID' },
+        projectId: projectIdProp,
+      },
+      required: ['apiId'],
+    },
+    handler: (apifox, args) => apifox.endpoints.get(args.apiId, args.projectId),
+  },
+  {
+    name: 'apifox_create_endpoint',
+    description: '创建新接口',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '接口名称' },
+        method: { type: 'string', description: 'HTTP 方法', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] },
+        path: { type: 'string', description: '接口路径,如 /api/users' },
+        folderId: { type: 'number', description: '所属文件夹 ID' },
+        description: { type: 'string', description: '接口描述' },
+        tags: { type: 'array', items: { type: 'string' }, description: '标签列表' },
+        projectId: projectIdProp,
+      },
+      required: ['name', 'method', 'path'],
+    },
+    handler: (apifox, args) =>
+      apifox.endpoints.create(
+        {
+          name: args.name,
+          method: args.method,
+          path: args.path,
+          folderId: args.folderId,
+          description: args.description,
+          tags: args.tags,
+        },
+        args.projectId
+      ),
+  },
+  {
+    name: 'apifox_update_endpoint',
+    description: '更新接口信息',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        apiId: { type: 'number', description: '接口 ID' },
+        name: { type: 'string', description: '接口名称' },
+        method: { type: 'string', description: 'HTTP 方法' },
+        path: { type: 'string', description: '接口路径' },
+        description: { type: 'string', description: '接口描述' },
+        projectId: projectIdProp,
+      },
+      required: ['apiId'],
+    },
+    handler: (apifox, args) =>
+      apifox.endpoints.update(
+        args.apiId,
+        { name: args.name, method: args.method, path: args.path, description: args.description },
+        args.projectId
+      ),
+  },
+  {
+    name: 'apifox_delete_endpoint',
+    description: '删除接口',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        apiId: { type: 'number', description: '接口 ID' },
+        verify: { type: 'boolean', description: '删除后是否回查确认,默认 false' },
+        projectId: projectIdProp,
+      },
+      required: ['apiId'],
+    },
+    handler: (apifox, args) => apifox.endpoints.remove(args.apiId, args.projectId, args.verify === true),
+  },
+  {
+    name: 'apifox_import_openapi',
+    description: '导入 OpenAPI/Swagger 数据到项目(支持 JSON 或 YAML 字符串)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        spec: { type: 'string', description: 'OpenAPI/Swagger 规范内容(JSON 或 YAML 格式字符串)' },
+        projectId: projectIdProp,
+      },
+      required: ['spec'],
+    },
+    handler: (apifox, args) => apifox.importExport.importOpenAPI(toJsonSpec(args.spec), { projectId: args.projectId }),
+  },
+  {
+    name: 'apifox_export_openapi',
+    description: '导出项目/模块为 OpenAPI 格式',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        moduleId: { type: 'number', description: '模块 ID,可选。指定则只导出该模块' },
+        addFoldersToTags: { type: 'boolean', description: '目录是否输出为 tag,默认 false' },
+        projectId: projectIdProp,
+      },
+    },
+    handler: (apifox, args) =>
+      apifox.importExport.exportOpenAPI({
+        projectId: args.projectId,
+        moduleId: args.moduleId,
+        addFoldersToTags: args.addFoldersToTags === true,
+      }),
+  },
+];
+
+/** 把 YAML 或 JSON 字符串统一成 JSON 字符串(import-data 接受 OpenAPI 字符串) */
+export function toJsonSpec(spec: string): string {
+  const trimmed = spec.trim();
+  if (trimmed.startsWith('{')) return trimmed;
+  try {
+    return JSON.stringify(yaml.parse(spec));
+  } catch {
+    return spec;
+  }
+}
+
+export const toolMap: Map<string, ToolDef> = new Map(tools.map((t) => [t.name, t]));

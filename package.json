@@ -1,7 +1,7 @@
 {
   "name": "apifox-mcp-server",
-  "version": "1.0.0",
-  "description": "Apifox MCP Server with read/write/import capabilities - A Model Context Protocol server for Apifox API management",
+  "version": "2.0.0",
+  "description": "Apifox MCP Server with multi-project switching, read/write/import capabilities - A Model Context Protocol server for Apifox API management",
   "main": "dist/index.js",
   "bin": {
     "apifox-mcp-server": "./dist/index.js"
@@ -10,6 +10,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run __tests__/smoke.integration.test.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -20,25 +23,27 @@
     "openapi",
     "swagger"
   ],
-  "author": "lishuji",
+  "author": "lingpfeng1-ux",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lishuji/apifox-mcp-server.git"
+    "url": "git+https://github.com/lingpfeng1-ux/apifox-mcp-server.git"
   },
   "bugs": {
-    "url": "https://github.com/lishuji/apifox-mcp-server/issues"
+    "url": "https://github.com/lingpfeng1-ux/apifox-mcp-server/issues"
   },
-  "homepage": "https://github.com/lishuji/apifox-mcp-server#readme",
+  "homepage": "https://github.com/lingpfeng1-ux/apifox-mcp-server#readme",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "axios": "^1.6.0",
-    "yaml": "^2.3.4"
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "axios": "^1.18.0",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "typescript": "^5.3.0",
-    "ts-node": "^10.9.0"
+    "ts-node": "^10.9.0",
+    "vitest": "^4.1.9",
+    "axios-mock-adapter": "^2.1.0"
   },
   "engines": {
     "node": ">=18.0.0"

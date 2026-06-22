@@ -1,118 +1,90 @@
 # Apifox MCP Server
 
-[![npm version](https://badge.fury.io/js/apifox-mcp-server.svg)](https://www.npmjs.com/package/apifox-mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Model Context Protocol (MCP) server for Apifox API management with read/write/import capabilities, based on [Apifox Open API](https://apifox-openapi.apifox.cn/).
+A Model Context Protocol (MCP) server for Apifox API management, with multi-project
+switching and read/write/import capabilities. Based on the Apifox API.
+
+> v2.0 是一次完整重构:分层架构、修复对 personal token 失效的端点、新增测试套件。
+> 工具集做了破坏性调整(详见下方迁移说明)。
 
 ## Features
 
-### Read Operations
-- `apifox_get_project` - Get project details
-- `apifox_get_folders` - Get folder list (directory structure)
-- `apifox_get_modules` - Get module list of a project
-- `apifox_find_folder` - Resolve moduleId + folderId by module name and folder name
-- `apifox_get_endpoints` - Get API endpoint list
-- `apifox_get_endpoint` - Get endpoint details
-- `apifox_get_schemas` - Get data model list
-- `apifox_export_openapi` - Export as OpenAPI format
+所有工具都支持可选 `projectId` 参数,在调用时覆盖默认项目(多项目切换)。
 
-### Write Operations
-- `apifox_create_folder` - Create folder
-- `apifox_create_endpoint` - Create API endpoint
-- `apifox_update_endpoint` - Update API endpoint
-- `apifox_delete_endpoint` - Delete API endpoint
-- `apifox_create_schema` - Create data model
+### 读操作
+- `apifox_get_project` — 项目详情
+- `apifox_list_modules` — 模块列表
+- `apifox_list_folders` — 列出指定模块下的目录(返回 moduleId/folderId/folderName/folderPath)
+- `apifox_find_folder` — 按模块名 + 目录名定位 moduleId/folderId
+- `apifox_list_endpoints` — 接口列表(可按 moduleId 过滤)
+- `apifox_get_endpoint` — 接口详情
 
-### Import Operations
-- `apifox_import_openapi` - Import OpenAPI/Swagger data
-- `apifox_import_openapi_from_url` - Import OpenAPI data from URL
+### 写操作
+- `apifox_create_endpoint` — 创建接口(带真实成功校验)
+- `apifox_update_endpoint` — 更新接口
+- `apifox_delete_endpoint` — 删除接口(可选 `verify` 删除后回查)
 
-## Installation
+### 导入导出
+- `apifox_import_openapi` — 导入 OpenAPI/Swagger(JSON 或 YAML 字符串)
+- `apifox_export_openapi` — 导出项目/模块为 OpenAPI(可按 moduleId、可选目录转 tag)
 
-### From npm
+## 多项目支持
 
-```bash
-npm install -g apifox-mcp-server
+每个工具都接受可选 `projectId`。实际项目 ID 的解析优先级:
+
+1. 工具调用参数里的 `projectId`(最高)
+2. 启动参数 `--project=<id>`
+3. 环境变量 `APIFOX_PROJECT_ID`
+4. 以上都没有 → 返回明确错误
+
+因此 `--project` 是**可选**的,可只靠 `APIFOX_PROJECT_ID` 或每次调用传 `projectId`。
+
+```jsonc
+// 用默认项目
+apifox_get_project({})
+// 覆盖到指定项目
+apifox_list_modules({ projectId: 7834388 })
+// 按名定位目录
+apifox_find_folder({ projectId: 7834388, moduleName: "KAZ-PDP -接口", folderName: "Client-Image" })
+// => { projectId:"7834388", moduleId:7586044, folderId:83801899, moduleName:"KAZ-PDP -接口", folderName:"Client-Image" }
 ```
 
-### From source
+## 已知限制(personal access token)
+
+使用个人访问令牌(`afxp_`)时,Apifox 的部分旧内部端点不可用,本服务据此做了取舍:
+
+- **目录无法通过 API 创建/删除**:`/api-tree-folders` 返回 302。`list_folders`/`find_folder`
+  通过 `export-openapi` + `http-apis` 关联重建目录信息;要新建目录,请用 `import_openapi`
+  导入带 tag 的接口,Apifox 会按 tag 自动建目录。
+- **数据模型(schema)端点不可用**:`/schemas` GET 返回空、POST 返回 302,故未提供 schema 工具。
+- **失效端点不再静默**:底层 HTTP 客户端会把 302 重定向与 200 空 body 识别为"端点不可用"
+  并抛出明确错误,避免旧实现里"假成功"的问题。
+
+## 安装
 
 ```bash
-git clone https://github.com/lishuji/apifox-mcp-server.git
+git clone https://github.com/lingpfeng1-ux/apifox-mcp-server.git
 cd apifox-mcp-server
 npm install
 npm run build
 ```
 
-## Multi-Project Support
+## 配置
 
-Every tool accepts an **optional `projectId` parameter** to target a specific
-project at call time, so a single running server can switch between multiple
-Apifox projects without restarting.
+### 获取 Access Token
+登录 Apifox → 头像 → 账号设置 → API 访问令牌 → 新建并保存。
 
-The effective project ID for each call is resolved in this priority order:
+### MCP 客户端配置
 
-1. The `projectId` passed in the tool call arguments (highest priority)
-2. The `--project=<id>` startup argument
-3. The `APIFOX_PROJECT_ID` environment variable
-4. If none of the above is set, the call returns a clear error
-
-Because of this fallback chain, `--project` is now **optional**: you may omit it
-and rely on `APIFOX_PROJECT_ID` and/or per-call `projectId` instead.
-
-> Note: the `projectId` argument only routes the request to the target project
-> (it is used in the API URL path). It is never injected into the Apifox
-> request body of create/update/import operations.
-
-### Examples
-
-```typescript
-// Use the default project (--project / APIFOX_PROJECT_ID)
-apifox_get_project({});
-
-// Override the default project for a single call
-apifox_get_project({ projectId: 7834388 });
-
-// List modules of a specific project
-apifox_get_modules({ projectId: 7834388 });
-
-// Resolve moduleId + folderId by name
-apifox_find_folder({
-  projectId: 7834388,
-  moduleName: "KAZ-PDP -接口",
-  folderName: "Client-Image"
-});
-// => { projectId: "7834388", moduleId: 7586044, folderId: 83801899,
-//      moduleName: "KAZ-PDP -接口", folderName: "Client-Image" }
-```
-
-## Configuration
-
-### 1. Get API Access Token
-
-1. Login to [Apifox](https://apifox.com)
-2. Click avatar in top right → Account Settings
-3. Click "API Access Token" → Create new token
-4. Save the generated token
-
-### 2. Get Project ID
-
-1. Open your Apifox project
-2. The number in the project URL is the project ID, e.g., `4051641` in `https://apifox.com/project/4051641`
-
-### 3. Configure MCP Client
-
-Add to your MCP client configuration (e.g., `~/.codebuddy/mcp.json` for CodeBuddy):
-
-```json
+```jsonc
 {
   "mcpServers": {
     "Apifox": {
-      "command": "npx",
+      "command": "node",
       "args": [
-        "apifox-mcp-server",
-        "--project=YOUR_PROJECT_ID"
+        "/abs/path/dist/index.js",
+        "--project=YOUR_PROJECT_ID"     // 可选
       ],
       "env": {
         "APIFOX_ACCESS_TOKEN": "YOUR_ACCESS_TOKEN"
@@ -122,109 +94,62 @@ Add to your MCP client configuration (e.g., `~/.codebuddy/mcp.json` for CodeBudd
 }
 ```
 
-Or if installed globally:
+启动参数(均可选):
+- `--project=<id>` 默认项目 ID
+- `--base-url=<url>` API 基址(默认 `https://api.apifox.com`)
+- `--api-version=<version>` 接口版本头(默认 `2024-03-28`)
 
-```json
-{
-  "mcpServers": {
-    "Apifox": {
-      "command": "apifox-mcp-server",
-      "args": [
-        "--project=YOUR_PROJECT_ID"
-      ],
-      "env": {
-        "APIFOX_ACCESS_TOKEN": "YOUR_ACCESS_TOKEN"
-      }
-    }
-  }
-}
+## 测试
+
+```bash
+npm test                 # 单元测试(mock HTTP,无副作用)
+npm run test:integration # opt-in 集成 smoke(真实 API,需环境变量)
 ```
 
-## Usage Examples
+集成 smoke 需要(默认 skip,有副作用步骤再受 `APIFOX_RUN_WRITE` 二次开关控制):
 
-### Import OpenAPI Data
-
-```typescript
-// Read local OpenAPI file content
-const spec = fs.readFileSync('openapi.yaml', 'utf-8');
-
-// Call import tool
-apifox_import_openapi({
-  spec: spec,
-  targetFolderId: 12345,  // Target folder ID
-  coverExistApi: true,    // Overwrite existing APIs
-  syncFolder: true        // Sync folder structure
-});
+```bash
+APIFOX_RUN_INTEGRATION=1 \
+APIFOX_RUN_WRITE=1 \
+APIFOX_ACCESS_TOKEN=<token> \
+APIFOX_TEST_PROJECT_ID=<projectId> \
+APIFOX_TEST_MODULE_ID=<moduleId> \
+npm run test:integration
 ```
 
-### Create Endpoint
+## 架构
 
-```typescript
-apifox_create_endpoint({
-  name: "Get User List",
-  method: "GET",
-  path: "/api/v1/users",
-  folderId: 12345,
-  description: "Paginated user list",
-  tags: ["User Management"]
-});
+```
+src/
+  index.ts            入口:启动 MCP server、注册 handler、统一错误包装
+  config.ts           配置解析(token / 默认 projectId / baseURL / api 版本)
+  errors.ts           统一错误类型 ApifoxError
+  apifox/
+    http.ts           底层 HTTP:鉴权、302/空 body 识别、错误归一化、resolveProjectId
+    projects.ts       项目 / 模块能力
+    endpoints.ts      接口 CRUD(写操作带成功校验)
+    folders.ts        目录能力(export + http-apis 关联重建)
+    importExport.ts   import-data 导入 / export-openapi 导出
+    types.ts          类型定义
+    index.ts          能力层门面 Apifox
+  tools/
+    registry.ts       MCP 工具注册表(schema + handler)
+__tests__/            vitest 单元测试 + opt-in 集成 smoke
+docs/plans/           设计文档
 ```
 
-### Create Folder
+## 从 v1 迁移(破坏性变更)
 
-```typescript
-apifox_create_folder({
-  name: "User APIs",
-  parentId: 0  // 0 means root directory
-});
-```
+| v1 工具 | v2 | 说明 |
+|---|---|---|
+| `apifox_get_modules` | `apifox_list_modules` | 重命名 |
+| `apifox_get_endpoints` | `apifox_list_endpoints` | 重命名 |
+| `apifox_get_folders` | `apifox_list_folders` | 重命名 + 重写(原实现失效) |
+| `apifox_create_folder` | (移除) | API 不支持;改用 `import_openapi` 建目录 |
+| `apifox_create_schema` / `apifox_get_schemas` | (移除) | `/schemas` 端点对 token 不可用 |
 
-## API Reference
-
-### apifox_import_openapi
-
-Import OpenAPI/Swagger specification data.
-
-**Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| spec | string | Yes | OpenAPI spec content (JSON/YAML) |
-| targetFolderId | number | No | Target folder ID, default 0 (root) |
-| coverExistApi | boolean | No | Overwrite existing APIs, default true |
-| coverExistSchema | boolean | No | Overwrite existing schemas, default true |
-| syncFolder | boolean | No | Sync folder structure, default true |
-
-### apifox_create_endpoint
-
-Create a new API endpoint.
-
-**Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| name | string | Yes | Endpoint name |
-| method | string | Yes | HTTP method (GET, POST, PUT, DELETE, PATCH) |
-| path | string | Yes | Endpoint path |
-| folderId | number | No | Parent folder ID |
-| description | string | No | Endpoint description |
-| tags | string[] | No | Tag list |
-
-## Notes
-
-1. **API Version**: Uses `X-Apifox-Api-Version: 2024-03-28` header
-2. **Authentication**: Bearer Token authentication
-3. **Rate Limiting**: Be aware of Apifox API rate limits
-4. **Permissions**: Ensure token has sufficient project operation permissions
-
-## Related Links
-
-- [Apifox Open API Documentation](https://apifox-openapi.apifox.cn/)
-- [Apifox Help Documentation](https://docs.apifox.com/)
-- [MCP Protocol Documentation](https://modelcontextprotocol.io/)
+其余工具名不变,但写操作增加了真实成功校验,导入改用了正确的请求格式。
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+MIT License — see [LICENSE](LICENSE).
