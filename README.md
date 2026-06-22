@@ -19,6 +19,7 @@ switching and read/write/import capabilities. Based on the Apifox API.
 - `apifox_find_folder` — 按模块名 + 目录名定位 moduleId/folderId
 - `apifox_list_endpoints` — 接口列表(可按 moduleId 过滤)
 - `apifox_get_endpoint` — 接口详情
+- `apifox_list_schemas` — 列出数据模型(只读,可按 moduleId 过滤)
 
 ### 写操作
 - `apifox_create_endpoint` — 创建接口(带真实成功校验;支持 parameters/requestBody/responses)
@@ -40,9 +41,14 @@ switching and read/write/import capabilities. Based on the Apifox API.
 
 ## 数据模型(data schema)工作流
 
-`POST /schemas` 直接建模型对 personal token 不可用(302),因此**创建数据模型的唯一方式
-是通过 `import_openapi`**:在 OpenAPI 的 `components.schemas` 中定义模型,`paths` 里用
-`$ref` 引用,一次导入即可创建数据模型并让接口引用它们。
+数据模型端点对 personal token 的开放程度:**`GET /data-schemas` 可读(`list_schemas`),
+但所有写端点(`POST`/`PUT`/`PATCH`/`DELETE /data-schemas`)返回 302 不可用**。因此:
+
+- **读**:用 `apifox_list_schemas` 列出项目数据模型(id/name/jsonSchema/folderId 等)。
+- **建**:唯一方式是 `import_openapi`——在 `components.schemas` 定义模型、`paths` 用 `$ref`
+  引用,一次导入即创建模型并让接口引用它们。
+- **改 / 删**:token 不开放(302),需在 Apifox UI 操作;import 重导同名模型默认会被
+  忽略(`ignore`),不会覆盖更新。
 
 ```jsonc
 apifox_import_openapi({
@@ -100,7 +106,8 @@ apifox_find_folder({ projectId: 7834388, moduleName: "KAZ-PDP -接口", folderNa
 - **目录无法通过 API 创建/删除**:`/api-tree-folders` 返回 302。`list_folders`/`find_folder`
   通过 `export-openapi` + `http-apis` 关联重建目录信息;要新建目录,请用 `import_openapi`
   导入带 tag 的接口,Apifox 会按 tag 自动建目录。
-- **数据模型(schema)端点不可用**:`/schemas` GET 返回空、POST 返回 302,故未提供 schema 工具。
+- **数据模型(schema)只读**:`GET /data-schemas` 可读(`list_schemas`),但写端点
+  (POST/PUT/PATCH/DELETE)返回 302。创建走 `import_openapi`,改/删需在 Apifox UI。
 - **失效端点不再静默**:底层 HTTP 客户端会把 302 重定向与 200 空 body 识别为"端点不可用"
   并抛出明确错误,避免旧实现里"假成功"的问题。
 
@@ -189,7 +196,7 @@ docs/plans/           设计文档
 | `apifox_get_endpoints` | `apifox_list_endpoints` | 重命名 |
 | `apifox_get_folders` | `apifox_list_folders` | 重命名 + 重写(原实现失效) |
 | `apifox_create_folder` | (移除) | API 不支持;改用 `import_openapi` 建目录 |
-| `apifox_create_schema` / `apifox_get_schemas` | (移除) | `/schemas` 端点对 token 不可用 |
+| `apifox_create_schema` / `apifox_get_schemas` | `apifox_list_schemas`(只读) | 仅保留读;写端点 302,创建走 import |
 
 其余工具名不变,但写操作增加了真实成功校验,导入改用了正确的请求格式。
 

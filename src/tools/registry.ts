@@ -212,6 +212,20 @@ export const tools: ToolDef[] = [
         addFoldersToTags: args.addFoldersToTags === true,
       }),
   },
+  {
+    name: 'apifox_list_schemas',
+    description:
+      '列出项目的数据模型(只读)。注:数据模型的创建只能通过 import_openapi,' +
+      '修改/删除需在 Apifox UI 操作(写端点对 personal token 返回 302)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        moduleId: { type: ['string', 'number'], description: '模块 ID,可选,按模块过滤' },
+        projectId: projectIdProp,
+      },
+    },
+    handler: (apifox, args) => apifox.schemas.list(args.projectId, args.moduleId),
+  },
 ];
 
 /** 把 YAML 或 JSON 字符串统一成 JSON 字符串(import-data 接受 OpenAPI 字符串) */
