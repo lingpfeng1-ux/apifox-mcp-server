@@ -58,4 +58,10 @@ export interface EndpointInput {
   description?: string;
   tags?: string[];
   status?: string;
+  /** 参数对象:{ path, query, header, cookie } 各为参数数组(原样透传给 Apifox) */
+  parameters?: unknown;
+  /** 请求体结构(原样透传) */
+  requestBody?: unknown;
+  /** 响应定义数组(原样透传) */
+  responses?: unknown[];
 }

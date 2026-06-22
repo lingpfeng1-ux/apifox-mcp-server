@@ -96,6 +96,12 @@ export const tools: ToolDef[] = [
         folderId: { type: 'number', description: '所属文件夹 ID' },
         description: { type: 'string', description: '接口描述' },
         tags: { type: 'array', items: { type: 'string' }, description: '标签列表' },
+        parameters: {
+          type: 'object',
+          description: '参数对象 { path, query, header, cookie }(各为参数数组),原样传 Apifox 结构',
+        },
+        requestBody: { type: 'object', description: '请求体结构(原样传 Apifox 结构)' },
+        responses: { type: 'array', description: '响应定义数组(原样传 Apifox 结构)' },
         projectId: projectIdProp,
       },
       required: ['name', 'method', 'path'],
@@ -109,13 +115,16 @@ export const tools: ToolDef[] = [
           folderId: args.folderId,
           description: args.description,
           tags: args.tags,
+          parameters: args.parameters,
+          requestBody: args.requestBody,
+          responses: args.responses,
         },
         args.projectId
       ),
   },
   {
     name: 'apifox_update_endpoint',
-    description: '更新接口信息',
+    description: '更新接口信息(复杂结构建议先用 get_endpoint 拿到现有结构,改完再整体传入)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -124,6 +133,12 @@ export const tools: ToolDef[] = [
         method: { type: 'string', description: 'HTTP 方法' },
         path: { type: 'string', description: '接口路径' },
         description: { type: 'string', description: '接口描述' },
+        parameters: {
+          type: 'object',
+          description: '参数对象 { path, query, header, cookie },原样传 Apifox 结构',
+        },
+        requestBody: { type: 'object', description: '请求体结构(原样传 Apifox 结构)' },
+        responses: { type: 'array', description: '响应定义数组(原样传 Apifox 结构)' },
         projectId: projectIdProp,
       },
       required: ['apiId'],
@@ -131,7 +146,15 @@ export const tools: ToolDef[] = [
     handler: (apifox, args) =>
       apifox.endpoints.update(
         args.apiId,
-        { name: args.name, method: args.method, path: args.path, description: args.description },
+        {
+          name: args.name,
+          method: args.method,
+          path: args.path,
+          description: args.description,
+          parameters: args.parameters,
+          requestBody: args.requestBody,
+          responses: args.responses,
+        },
         args.projectId
       ),
   },
@@ -151,11 +174,20 @@ export const tools: ToolDef[] = [
   },
   {
     name: 'apifox_import_openapi',
-    description: '导入 OpenAPI/Swagger 数据到项目(支持 JSON 或 YAML 字符串)',
+    description:
+      '导入 OpenAPI/Swagger 数据到项目(支持 JSON 或 YAML 字符串)。' +
+      '推荐用于创建/更新带数据模型的接口:在 spec 的 components.schemas 中定义数据模型,' +
+      'paths 里用 $ref 引用,一次导入即可创建数据模型并让接口引用它们' +
+      '(personal token 下这是创建数据模型的唯一可行方式)。',
     inputSchema: {
       type: 'object',
       properties: {
-        spec: { type: 'string', description: 'OpenAPI/Swagger 规范内容(JSON 或 YAML 格式字符串)' },
+        spec: {
+          type: 'string',
+          description:
+            'OpenAPI/Swagger 规范内容(JSON 或 YAML 字符串)。' +
+            '含 components.schemas 时会创建对应数据模型,paths 用 $ref 引用',
+        },
         projectId: projectIdProp,
       },
       required: ['spec'],

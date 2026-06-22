@@ -36,6 +36,42 @@ describe('EndpointService.create 成功校验', () => {
   });
 });
 
+describe('EndpointService 复杂字段透传', () => {
+  /** 捕获实际发出的请求 body */
+  function captureClient(): { svc: EndpointService; last: () => any } {
+    let captured: any;
+    const fake = {
+      request: async (c: AxiosRequestConfig) => {
+        captured = c.data;
+        return { status: 200, data: { data: { id: 7 } } };
+      },
+    } as unknown as AxiosInstance;
+    return { svc: new EndpointService(new HttpClient(cfg, fake)), last: () => captured };
+  }
+
+  it('create 透传 parameters/requestBody/responses', async () => {
+    const { svc, last } = captureClient();
+    await svc.create({
+      name: 'x',
+      method: 'post',
+      path: '/x',
+      parameters: { query: [{ name: 'q' }] },
+      requestBody: { type: 'application/json' },
+      responses: [{ code: 200 }],
+    });
+    expect(last().parameters).toEqual({ query: [{ name: 'q' }] });
+    expect(last().requestBody).toEqual({ type: 'application/json' });
+    expect(last().responses).toEqual([{ code: 200 }]);
+  });
+
+  it('update 透传 parameters/responses', async () => {
+    const { svc, last } = captureClient();
+    await svc.update(5, { parameters: { query: [{ name: 'q' }] }, responses: [{ code: 201 }] });
+    expect(last().parameters).toEqual({ query: [{ name: 'q' }] });
+    expect(last().responses).toEqual([{ code: 201 }]);
+  });
+});
+
 function importServiceWith(data: unknown): ImportExportService {
   const fake = {
     request: async () => ({ status: 200, data }),

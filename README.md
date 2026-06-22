@@ -21,13 +21,56 @@ switching and read/write/import capabilities. Based on the Apifox API.
 - `apifox_get_endpoint` — 接口详情
 
 ### 写操作
-- `apifox_create_endpoint` — 创建接口(带真实成功校验)
-- `apifox_update_endpoint` — 更新接口
+- `apifox_create_endpoint` — 创建接口(带真实成功校验;支持 parameters/requestBody/responses)
+- `apifox_update_endpoint` — 更新接口(支持改 name/method/path/description 及 parameters/requestBody/responses)
 - `apifox_delete_endpoint` — 删除接口(可选 `verify` 删除后回查)
 
 ### 导入导出
-- `apifox_import_openapi` — 导入 OpenAPI/Swagger(JSON 或 YAML 字符串)
+- `apifox_import_openapi` — 导入 OpenAPI/Swagger(JSON 或 YAML 字符串);**含 `components.schemas` 时会创建数据模型**
 - `apifox_export_openapi` — 导出项目/模块为 OpenAPI(可按 moduleId、可选目录转 tag)
+
+## 接口的参数 / 请求体 / 响应
+
+`create_endpoint` / `update_endpoint` 支持 `parameters` / `requestBody` / `responses`,
+原样透传给 Apifox。改复杂结构时,建议**先 `get_endpoint` 拿到现有结构,改完整体传回**,
+避免字段格式出错。
+
+`parameters` 形如 `{ path:[], query:[], header:[], cookie:[] }`,每个参数含
+`name/required/enable/type/schema` 等字段。
+
+## 数据模型(data schema)工作流
+
+`POST /schemas` 直接建模型对 personal token 不可用(302),因此**创建数据模型的唯一方式
+是通过 `import_openapi`**:在 OpenAPI 的 `components.schemas` 中定义模型,`paths` 里用
+`$ref` 引用,一次导入即可创建数据模型并让接口引用它们。
+
+```jsonc
+apifox_import_openapi({
+  spec: JSON.stringify({
+    openapi: "3.0.1",
+    info: { title: "x", version: "1.0.0" },
+    paths: {
+      "/user/create": {
+        post: {
+          tags: ["User"],
+          requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/UserReq" } } } },
+          responses: { "200": { content: { "application/json": { schema: { $ref: "#/components/schemas/UserResp" } } } } }
+        }
+      }
+    },
+    components: {
+      schemas: {
+        UserReq: { type: "object", properties: { name: { type: "string" } } },
+        UserResp: { type: "object", properties: { id: { type: "integer" } } }
+      }
+    }
+  })
+})
+// 导入后:数据模型 UserReq / UserResp 被创建,接口 /user/create 引用它们
+```
+
+> 注意:数据模型与目录一样**建得了但无法经 API 删除/单独修改**(对应端点 302),
+> 删除需在 Apifox UI 操作;覆盖更新可通过再次 import 同名模型。
 
 ## 多项目支持
 

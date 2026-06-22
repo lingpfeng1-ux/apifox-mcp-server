@@ -31,7 +31,7 @@ export class EndpointService {
   /** 创建接口,校验返回真实 id */
   async create(input: EndpointInput, projectId?: string | number): Promise<HttpApi> {
     const pid = this.http.resolveProjectId(projectId);
-    const body = await this.http.post(`/api/v1/projects/${pid}/http-apis`, {
+    const payload: Record<string, any> = {
       name: input.name,
       method: input.method.toUpperCase(),
       path: input.path,
@@ -39,7 +39,13 @@ export class EndpointService {
       status: input.status || 'developing',
       description: input.description || '',
       tags: input.tags || [],
-    });
+    };
+    // 复杂结构原样透传(调用方可先 get 拿现有结构再改)
+    if (input.parameters !== undefined) payload.parameters = input.parameters;
+    if (input.requestBody !== undefined) payload.requestBody = input.requestBody;
+    if (input.responses !== undefined) payload.responses = input.responses;
+
+    const body = await this.http.post(`/api/v1/projects/${pid}/http-apis`, payload);
     const data = (body?.data ?? body) as HttpApi;
     if (!data || data.id == null) {
       throw new ApifoxError('创建接口未返回有效 id,可能创建失败', { endpoint: 'http-apis' });
