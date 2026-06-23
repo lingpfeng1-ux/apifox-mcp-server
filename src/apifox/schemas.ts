@@ -13,6 +13,8 @@
 
 import { HttpClient } from './http';
 import { ApifoxError } from '../errors';
+import { ImportExportService } from './importExport';
+import { ImportSummary } from './types';
 
 export interface DataSchema {
   id: number;
@@ -41,7 +43,10 @@ export interface ListSchemasParams {
 }
 
 export class SchemaService {
-  constructor(private readonly http: HttpClient) {}
+  constructor(
+    private readonly http: HttpClient,
+    private readonly importExport: ImportExportService
+  ) {}
 
   /** 拉取项目全部数据模型(完整,含 jsonSchema;内部用) */
   private async fetchAll(projectId?: string | number, moduleId?: string | number): Promise<DataSchema[]> {
@@ -92,6 +97,34 @@ export class SchemaService {
       throw new ApifoxError(`未找到数据模型「${idOrName}」`, { endpoint: 'data-schemas' });
     }
     return found;
+  }
+
+  /**
+   * 创建或覆盖一个数据模型(按模型名)。
+   * 内部组装最小 OpenAPI(components.schemas)并 import(schemaOverwriteMode="name"),
+   * 免去 AI 手搓完整 OpenAPI 包装。同名存在则覆盖更新,不存在则创建。
+   */
+  async upsert(name: string, jsonSchema: unknown, projectId?: string | number): Promise<ImportSummary> {
+    const spec = JSON.stringify({
+      openapi: '3.0.1',
+      info: { title: 'schema-upsert', version: '1.0.0' },
+      paths: {},
+      components: { schemas: { [name]: jsonSchema } },
+    });
+    return this.importExport.importOpenAPI(spec, { projectId, schemaOverwriteMode: 'name' });
+  }
+
+  /**
+   * 更新已有数据模型的结构(按 id 或名称定位)。
+   * import 按"模型名"覆盖,故传 id 时先解析出名称。
+   * jsonSchema 为完整新结构(建议先 get() 拿现有结构改完整传)。
+   */
+  async update(idOrName: number | string, jsonSchema: unknown, projectId?: string | number): Promise<ImportSummary> {
+    let name = String(idOrName);
+    if (typeof idOrName === 'number' || /^\d+$/.test(name)) {
+      name = (await this.get(idOrName, projectId)).name;
+    }
+    return this.upsert(name, jsonSchema, projectId);
   }
 
   /**

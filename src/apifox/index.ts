@@ -29,7 +29,7 @@ export class Apifox {
     this.endpoints = new EndpointService(this.http);
     this.importExport = new ImportExportService(this.http);
     this.folders = new FolderService(this.http, this.projects, this.endpoints, this.importExport);
-    this.schemas = new SchemaService(this.http);
+    this.schemas = new SchemaService(this.http, this.importExport);
   }
 }
 

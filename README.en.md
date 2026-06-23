@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
 ![MCP](https://img.shields.io/badge/MCP-compatible-blue)
-![Tools](https://img.shields.io/badge/tools-16-orange)
+![Tools](https://img.shields.io/badge/tools-18-orange)
 
 [简体中文](./README.md) | **English**
 
@@ -19,7 +19,7 @@ A Model Context Protocol (MCP) server for Apifox API management — multi-projec
 - **No silent failure**: the HTTP layer detects 302 redirects and empty responses, turning "endpoints unavailable to the current token" into explicit errors — no more false success.
 - **Full CRUD**: endpoint CRUD, data-model read/create/update/delete, folder management, OpenAPI import/export.
 
-## Tools (16 total)
+## Tools (18 total)
 
 Every tool accepts an optional `projectId` to override the default project.
 
@@ -39,11 +39,13 @@ Every tool accepts an optional `projectId` to override the default project.
 ### Write / Delete
 | Tool | Description |
 |---|---|
-| `apifox_create_endpoint` | Create endpoint (with success validation; supports parameters/requestBody/responses) |
-| `apifox_update_endpoint` | Update endpoint |
+| `apifox_create_endpoint` | Create endpoint (folderId or folderName+moduleName auto-resolve; supports parameters/requestBody/responses) |
+| `apifox_update_endpoint` | Update endpoint (folderName supported to move folder) |
 | `apifox_delete_endpoint` | Delete endpoint (optional `verify` re-check) |
-| `apifox_delete_schema` | Delete data model |
-| `apifox_delete_folder` | Delete endpoint folder |
+| `apifox_create_schema` | Create data model (just name + jsonSchema; spec auto-assembled & imported) |
+| `apifox_update_schema` | Update data model structure (by id/name; auto overwrite-import) |
+| `apifox_delete_schema` | Delete data model (irreversible) |
+| `apifox_delete_folder` | Delete endpoint folder (supports `dryRun` to preview affected endpoints) |
 
 ### Import / Export
 | Tool | Description |
@@ -97,12 +99,12 @@ flowchart LR
     A[search_endpoints<br/>locate by keyword] --> B[get_endpoint<br/>get structure] --> C[update_endpoint<br/>modify]
   end
   subgraph Edit data model
-    D[list_schemas<br/>find by keyword] --> E[get_schema<br/>get jsonSchema] --> F[import_openapi<br/>schemaOverwriteMode=name]
+    D[list_schemas<br/>find by keyword] --> E[get_schema<br/>get jsonSchema] --> F[update_schema<br/>send back edited]
   end
 ```
 
 - **Edit an endpoint**: `search_endpoints` (find apiId by keyword) → `get_endpoint` (get structure) → `update_endpoint`
-- **Edit a data-model field**: `list_schemas` (keyword) → `get_schema` (get jsonSchema) → edit → `import_openapi` (`schemaOverwriteMode:"name"`)
+- **Edit a data-model field**: `list_schemas` (keyword) → `get_schema` (get jsonSchema) → edit → `update_schema` (no need to hand-write OpenAPI)
 - List tools return indexes only — don't dump full details into context
 
 ## Multi-Project Support

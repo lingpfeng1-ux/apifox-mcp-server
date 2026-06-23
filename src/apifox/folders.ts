@@ -79,14 +79,44 @@ export class FolderService {
   }
 
   /**
+   * 统计某目录下直接归属的接口(用于删除前预览影响)。
+   * 注:子目录的接口不计入(Apifox folderId 是直接归属)。
+   */
+  async endpointsInFolder(
+    folderId: number,
+    projectId?: string | number,
+    moduleId?: string | number
+  ): Promise<{ id: number; name: string; method: string; path: string }[]> {
+    const apis = await this.endpoints.list(projectId, moduleId);
+    return apis
+      .filter((a) => a.folderId === folderId)
+      .map((a) => ({ id: a.id, name: a.name, method: a.method, path: a.path }));
+  }
+
+  /**
    * 删除接口目录。
    * 逆向得到的端点:DELETE /api/v1/projects/{id}/api-folders/{folderId}(personal token 可用)。
-   * 注意:目录下有接口时 Apifox 通常会一并删除,请先确认目录内容。
+   * 注意:目录下有接口时 Apifox 会一并删除。
+   *
+   * dryRun=true 时不删除,只返回将受影响的接口列表(供 AI 确认后再真正删除)。
    */
-  async removeFolder(folderId: number, projectId?: string | number): Promise<{ deleted: true }> {
+  async removeFolder(
+    folderId: number,
+    projectId?: string | number,
+    opts: { dryRun?: boolean; moduleId?: string | number } = {}
+  ): Promise<
+    | { dryRun: true; folderId: number; affectedEndpoints: { id: number; name: string; method: string; path: string }[] }
+    | { deleted: true; folderId: number; deletedEndpointCount: number }
+  > {
     const pid = this.http.resolveProjectId(projectId);
+    const affected = await this.endpointsInFolder(folderId, pid, opts.moduleId);
+
+    if (opts.dryRun) {
+      return { dryRun: true, folderId, affectedEndpoints: affected };
+    }
+
     await this.http.delete(`/api/v1/projects/${pid}/api-folders/${folderId}`);
-    return { deleted: true };
+    return { deleted: true, folderId, deletedEndpointCount: affected.length };
   }
 
   /** 构建 method+path -> 目录路径(来自 export 的 x-apifox-folder / tag) */

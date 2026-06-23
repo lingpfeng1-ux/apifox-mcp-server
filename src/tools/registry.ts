@@ -119,14 +119,16 @@ export const tools: ToolDef[] = [
   },
   {
     name: 'apifox_create_endpoint',
-    description: '创建新接口',
+    description: '创建新接口。可传 folderId,或传 folderName(+moduleName)由服务自动解析 folderId。',
     inputSchema: {
       type: 'object',
       properties: {
         name: { type: 'string', description: '接口名称' },
         method: { type: 'string', description: 'HTTP 方法', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] },
         path: { type: 'string', description: '接口路径,如 /api/users' },
-        folderId: { type: 'number', description: '所属文件夹 ID' },
+        folderId: { type: 'number', description: '所属目录 ID(已知时直接传)' },
+        folderName: { type: 'string', description: '目录名(替代 folderId,需配合 moduleName 自动解析)' },
+        moduleName: { type: 'string', description: '模块名(配合 folderName 使用)' },
         description: { type: 'string', description: '接口描述' },
         tags: { type: 'array', items: { type: 'string' }, description: '标签列表' },
         parameters: {
@@ -139,13 +141,14 @@ export const tools: ToolDef[] = [
       },
       required: ['name', 'method', 'path'],
     },
-    handler: (apifox, args) =>
-      apifox.endpoints.create(
+    handler: async (apifox, args) => {
+      const folderId = await resolveFolderId(apifox, args);
+      return apifox.endpoints.create(
         {
           name: args.name,
           method: args.method,
           path: args.path,
-          folderId: args.folderId,
+          folderId,
           description: args.description,
           tags: args.tags,
           parameters: args.parameters,
@@ -153,7 +156,8 @@ export const tools: ToolDef[] = [
           responses: args.responses,
         },
         args.projectId
-      ),
+      );
+    },
   },
   {
     name: 'apifox_update_endpoint',
@@ -169,6 +173,9 @@ export const tools: ToolDef[] = [
         method: { type: 'string', description: 'HTTP 方法' },
         path: { type: 'string', description: '接口路径' },
         description: { type: 'string', description: '接口描述' },
+        folderId: { type: 'number', description: '移动到的目录 ID(可选)' },
+        folderName: { type: 'string', description: '移动到的目录名(替代 folderId,需配合 moduleName)' },
+        moduleName: { type: 'string', description: '模块名(配合 folderName 使用)' },
         parameters: {
           type: 'object',
           description: '参数对象 { path, query, header, cookie },原样传 Apifox 结构',
@@ -179,20 +186,23 @@ export const tools: ToolDef[] = [
       },
       required: ['apiId'],
     },
-    handler: (apifox, args) =>
-      apifox.endpoints.update(
+    handler: async (apifox, args) => {
+      const folderId = await resolveFolderId(apifox, args);
+      return apifox.endpoints.update(
         args.apiId,
         {
           name: args.name,
           method: args.method,
           path: args.path,
           description: args.description,
+          ...(folderId !== undefined ? { folderId } : {}),
           parameters: args.parameters,
           requestBody: args.requestBody,
           responses: args.responses,
         },
         args.projectId
-      ),
+      );
+    },
   },
   {
     name: 'apifox_delete_endpoint',
@@ -301,10 +311,42 @@ export const tools: ToolDef[] = [
     handler: (apifox, args) => apifox.schemas.get(args.idOrName, args.projectId),
   },
   {
+    name: 'apifox_create_schema',
+    description:
+      '创建数据模型(只需给模型名 + jsonSchema,内部自动组装 OpenAPI 并导入,无需手搓 spec)。' +
+      '同名模型已存在时会被覆盖更新。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: '数据模型名称' },
+        jsonSchema: { type: 'object', description: 'JSON Schema 定义,如 { type:"object", properties:{...}, required:[...] }' },
+        projectId: projectIdProp,
+      },
+      required: ['name', 'jsonSchema'],
+    },
+    handler: (apifox, args) => apifox.schemas.upsert(args.name, args.jsonSchema, args.projectId),
+  },
+  {
+    name: 'apifox_update_schema',
+    description:
+      '更新已有数据模型的结构(按 id 或名称定位,内部自动组装 OpenAPI 并覆盖导入)。' +
+      'jsonSchema 为完整新结构,建议先 get_schema 拿现有结构改完整传。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        idOrName: { type: ['number', 'string'], description: '数据模型 ID 或名称' },
+        jsonSchema: { type: 'object', description: '完整的新 JSON Schema 定义' },
+        projectId: projectIdProp,
+      },
+      required: ['idOrName', 'jsonSchema'],
+    },
+    handler: (apifox, args) => apifox.schemas.update(args.idOrName, args.jsonSchema, args.projectId),
+  },
+  {
     name: 'apifox_delete_schema',
     description:
-      '删除数据模型(逆向 Apifox 客户端得到:DELETE /api/v1/api-schemas/{id} + X-Project-Id header)。' +
-      '先用 apifox_list_schemas 获取模型 id。',
+      '删除数据模型(DELETE /api/v1/api-schemas/{id} + X-Project-Id header)。' +
+      '⚠️ 不可逆,且引用该模型的接口会变成悬空 $ref。先用 list_schemas 获取 id 并确认无误。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -318,17 +360,24 @@ export const tools: ToolDef[] = [
   {
     name: 'apifox_delete_folder',
     description:
-      '删除接口目录(逆向 Apifox 客户端得到 DELETE /api/v1/projects/{id}/api-folders/{folderId},personal token 可用)。' +
-      '先用 apifox_find_folder 或 apifox_list_folders 获取 folderId。注意:目录下的接口可能被一并删除。',
+      '删除接口目录(DELETE /api/v1/projects/{id}/api-folders/{folderId})。' +
+      '⚠️ 目录下的接口会被一并删除,不可逆。建议先用 dryRun=true 预览将受影响的接口,确认后再真正删除。' +
+      'folderId 从 find_folder / list_folders 获取。',
     inputSchema: {
       type: 'object',
       properties: {
-        folderId: { type: 'number', description: '目录 ID(从 find_folder 或 list_folders 返回的 folderId 获取)' },
+        folderId: { type: 'number', description: '目录 ID(从 find_folder 或 list_folders 获取)' },
+        dryRun: { type: 'boolean', description: 'true 时只预览将被删除的接口,不真正删除' },
+        moduleId: { type: ['string', 'number'], description: '模块 ID,可选,缩小统计范围' },
         projectId: projectIdProp,
       },
       required: ['folderId'],
     },
-    handler: (apifox, args) => apifox.folders.removeFolder(args.folderId, args.projectId),
+    handler: (apifox, args) =>
+      apifox.folders.removeFolder(args.folderId, args.projectId, {
+        dryRun: args.dryRun === true,
+        moduleId: args.moduleId,
+      }),
   },
 ];
 
@@ -341,6 +390,19 @@ export function toJsonSpec(spec: string): string {
   } catch {
     return spec;
   }
+}
+
+/**
+ * 解析 folderId:优先用显式 folderId;否则若给了 folderName(+moduleName)则自动 find_folder。
+ * 都没给则返回 undefined(根目录 / 不改目录)。
+ */
+async function resolveFolderId(apifox: Apifox, args: Record<string, any>): Promise<number | undefined> {
+  if (args.folderId != null) return args.folderId;
+  if (args.folderName && args.moduleName) {
+    const r = await apifox.folders.findFolder(args.moduleName, args.folderName, args.projectId);
+    return r.folderId;
+  }
+  return undefined;
 }
 
 export const toolMap: Map<string, ToolDef> = new Map(tools.map((t) => [t.name, t]));

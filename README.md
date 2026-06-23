@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
 ![MCP](https://img.shields.io/badge/MCP-compatible-blue)
-![Tools](https://img.shields.io/badge/tools-16-orange)
+![Tools](https://img.shields.io/badge/tools-18-orange)
 
 **简体中文** | [English](./README.en.md)
 
@@ -19,7 +19,7 @@
 - **不静默失败**:底层 HTTP 客户端识别 302 重定向与空响应,把"对当前 token 不可用的端点"抛成明确错误,杜绝"假成功"。
 - **完整 CRUD**:接口增删改查、数据模型读/建/改/删、目录管理、OpenAPI 导入导出。
 
-## 工具清单(共 16 个)
+## 工具清单(共 18 个)
 
 所有工具均支持可选 `projectId` 参数覆盖默认项目。
 
@@ -39,11 +39,13 @@
 ### 写 / 删除
 | 工具 | 说明 |
 |---|---|
-| `apifox_create_endpoint` | 创建接口(带成功校验;支持 parameters/requestBody/responses) |
-| `apifox_update_endpoint` | 更新接口 |
+| `apifox_create_endpoint` | 创建接口(可传 folderId 或 folderName+moduleName 自动定位目录;支持 parameters/requestBody/responses) |
+| `apifox_update_endpoint` | 更新接口(同样支持 folderName 移动目录) |
 | `apifox_delete_endpoint` | 删除接口(可选 `verify` 删除后回查) |
-| `apifox_delete_schema` | 删除数据模型 |
-| `apifox_delete_folder` | 删除接口目录 |
+| `apifox_create_schema` | 创建数据模型(只需 name + jsonSchema,内部自动组装导入) |
+| `apifox_update_schema` | 更新数据模型结构(按 id/名称,内部自动覆盖导入) |
+| `apifox_delete_schema` | 删除数据模型(不可逆) |
+| `apifox_delete_folder` | 删除接口目录(支持 `dryRun` 预览将删除的接口) |
 
 ### 导入 / 导出
 | 工具 | 说明 |
@@ -97,12 +99,12 @@ flowchart LR
     A[search_endpoints<br/>关键词定位] --> B[get_endpoint<br/>拿结构] --> C[update_endpoint<br/>修改]
   end
   subgraph 改数据模型
-    D[list_schemas<br/>keyword 找模型] --> E[get_schema<br/>拿 jsonSchema] --> F[import_openapi<br/>schemaOverwriteMode=name]
+    D[list_schemas<br/>keyword 找模型] --> E[get_schema<br/>拿 jsonSchema] --> F[update_schema<br/>改完传回]
   end
 ```
 
 - **改某个接口**:`search_endpoints`(关键词找到 apiId)→ `get_endpoint`(拿结构)→ `update_endpoint`
-- **改某个数据模型字段**:`list_schemas`(keyword 找模型)→ `get_schema`(拿 jsonSchema)→ 修改 → `import_openapi`(`schemaOverwriteMode:"name"`)
+- **改某个数据模型字段**:`list_schemas`(keyword 找模型)→ `get_schema`(拿 jsonSchema)→ 改完用 `update_schema` 传回(无需手搓 OpenAPI)
 - 列表类工具只给索引,不要直接把全量详情灌进上下文
 
 ## 多项目支持
