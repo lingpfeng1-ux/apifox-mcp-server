@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
 ![MCP](https://img.shields.io/badge/MCP-compatible-blue)
-![Tools](https://img.shields.io/badge/tools-18-orange)
+![Tools](https://img.shields.io/badge/tools-16-orange)
 
 [简体中文](./README.md) | **English**
 
@@ -19,7 +19,7 @@ A Model Context Protocol (MCP) server for Apifox API management — multi-projec
 - **No silent failure**: the HTTP layer detects 302 redirects and empty responses, turning "endpoints unavailable to the current token" into explicit errors — no more false success.
 - **Full CRUD**: endpoint CRUD, data-model read/create/update/delete, folder management, OpenAPI import/export.
 
-## Tools (18 total)
+## Tools (16 total)
 
 Every tool accepts an optional `projectId` to override the default project.
 

@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
 ![MCP](https://img.shields.io/badge/MCP-compatible-blue)
-![Tools](https://img.shields.io/badge/tools-18-orange)
+![Tools](https://img.shields.io/badge/tools-16-orange)
 
 **简体中文** | [English](./README.en.md)
 
@@ -19,7 +19,7 @@
 - **不静默失败**:底层 HTTP 客户端识别 302 重定向与空响应,把"对当前 token 不可用的端点"抛成明确错误,杜绝"假成功"。
 - **完整 CRUD**:接口增删改查、数据模型读/建/改/删、目录管理、OpenAPI 导入导出。
 
-## 工具清单(共 18 个)
+## 工具清单(共 16 个)
 
 所有工具均支持可选 `projectId` 参数覆盖默认项目。
 
