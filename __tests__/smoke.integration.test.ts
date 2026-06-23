@@ -12,7 +12,7 @@
  * 接口 CRUD(create/update/delete)受 APIFOX_RUN_WRITE=1 二次开关控制,默认跳过。
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { parseConfig } from '../src/config';
 import { Apifox } from '../src/apifox';
 
@@ -24,7 +24,11 @@ const MODULE_ID = process.env.APIFOX_TEST_MODULE_ID ? Number(process.env.APIFOX_
 const d = RUN ? describe : describe.skip;
 
 d('集成 smoke(真实 API)', () => {
-  const apifox = new Apifox(parseConfig([]));
+  // 惰性构造:跳过(未开启集成)时不读取 token,避免 CI 无 token 时在收集阶段抛错
+  let apifox: Apifox;
+  beforeAll(() => {
+    apifox = new Apifox(parseConfig([]));
+  });
 
   it('get_project 可用', async () => {
     const p = await apifox.projects.getProject(PROJECT_ID);
