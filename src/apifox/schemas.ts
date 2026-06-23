@@ -1,11 +1,11 @@
 /**
  * 数据模型(data schema)能力。
  *
- * 端点说明(personal token 实测):
- *  - GET  /data-schemas        可用(读模型列表,含 id/name/jsonSchema/folderId 等)
- *  - POST/PUT/PATCH/DELETE     302 不可用(token 不开放模型写)
- * 因此本服务只提供只读;创建模型请用 import_openapi(components.schemas),
- * 修改/删除模型需在 Apifox UI 操作。
+ * 端点说明(personal token 实测 + 逆向 Apifox 客户端):
+ *  - GET  /api/v1/projects/{id}/data-schemas        可用(读模型列表)
+ *  - POST/PUT/PATCH /api/v1/projects/{id}/data-schemas  302 不可用
+ *  - DELETE /api/v1/api-schemas/{id}                可用(全局端点,需带 X-Project-Id header)
+ * 创建/更新模型请用 import_openapi(components.schemas + schemaOverwriteMode)。
  */
 
 import { HttpClient } from './http';
@@ -32,5 +32,18 @@ export class SchemaService {
     }
     const body = await this.http.get(`/api/v1/projects/${pid}/data-schemas`, params);
     return (body?.data ?? body) as DataSchema[];
+  }
+
+  /**
+   * 删除数据模型。
+   * 逆向得到:DELETE /api/v1/api-schemas/{id}(全局端点,必须带 X-Project-Id header)。
+   * projectId 用于解析 X-Project-Id，模型本身无需属于该项目之外的校验。
+   */
+  async remove(schemaId: number, projectId?: string | number): Promise<{ deleted: true }> {
+    const pid = this.http.resolveProjectId(projectId);
+    await this.http.request('delete', `/api/v1/api-schemas/${schemaId}`, {
+      headers: { 'X-Project-Id': pid },
+    });
+    return { deleted: true };
   }
 }

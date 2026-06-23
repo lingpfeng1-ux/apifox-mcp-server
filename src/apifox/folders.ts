@@ -78,6 +78,17 @@ export class FolderService {
     };
   }
 
+  /**
+   * 删除接口目录。
+   * 逆向得到的端点:DELETE /api/v1/projects/{id}/api-folders/{folderId}(personal token 可用)。
+   * 注意:目录下有接口时 Apifox 通常会一并删除,请先确认目录内容。
+   */
+  async removeFolder(folderId: number, projectId?: string | number): Promise<{ deleted: true }> {
+    const pid = this.http.resolveProjectId(projectId);
+    await this.http.delete(`/api/v1/projects/${pid}/api-folders/${folderId}`);
+    return { deleted: true };
+  }
+
   /** 构建 method+path -> 目录路径(来自 export 的 x-apifox-folder / tag) */
   private async buildFolderPathMap(
     moduleId: number,

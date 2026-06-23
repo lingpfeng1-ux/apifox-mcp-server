@@ -1,11 +1,27 @@
 /**
- * 接口(HTTP API)CRUD 能力。
+ * 接口(HTTP API)CRUD + 搜索能力。
  * 写操作带真实成功校验:不再靠"没抛异常"就报成功。
+ *
+ * 注:Apifox /http-apis 服务端只支持 moduleId/ids 过滤,无服务端关键词搜索。
+ * search() 在 MCP 层做内存过滤,避免 AI 拿全量列表导致上下文爆炸。
  */
 
 import { HttpClient } from './http';
 import { ApifoxError } from '../errors';
 import { EndpointInput, HttpApi } from './types';
+
+export interface SearchEndpointsParams {
+  /** 关键词:匹配接口名称或路径(不区分大小写) */
+  keyword?: string;
+  /** 按 HTTP 方法过滤(GET/POST/PUT/DELETE/PATCH) */
+  method?: string;
+  /** 按 folderId 过滤 */
+  folderId?: number;
+  /** 模块 ID */
+  moduleId?: string | number;
+  /** 最多返回条数,默认 20,最大 100 */
+  limit?: number;
+}
 
 export class EndpointService {
   constructor(private readonly http: HttpClient) {}
@@ -19,6 +35,36 @@ export class EndpointService {
     }
     const body = await this.http.get(`/api/v1/projects/${pid}/http-apis`, params);
     return (body?.data ?? body) as HttpApi[];
+  }
+
+  /**
+   * 搜索接口:先拉取指定模块下的列表,再在 MCP 层按关键词/方法/目录过滤。
+   * 避免 AI 拿全量接口列表导致上下文爆炸。
+   * 返回精简字段(id/name/method/path/folderId),需要完整详情再用 get()。
+   */
+  async search(
+    projectId?: string | number,
+    params: SearchEndpointsParams = {}
+  ): Promise<Pick<HttpApi, 'id' | 'name' | 'method' | 'path' | 'folderId'>[]> {
+    const all = await this.list(projectId, params.moduleId);
+    const keyword = params.keyword?.toLowerCase();
+    const method = params.method?.toUpperCase();
+    const limit = Math.min(params.limit ?? 20, 100);
+
+    const filtered = all.filter((api) => {
+      if (method && api.method?.toUpperCase() !== method) return false;
+      if (params.folderId != null && api.folderId !== params.folderId) return false;
+      if (keyword) {
+        const nameMatch = api.name?.toLowerCase().includes(keyword);
+        const pathMatch = api.path?.toLowerCase().includes(keyword);
+        if (!nameMatch && !pathMatch) return false;
+      }
+      return true;
+    });
+
+    return filtered.slice(0, limit).map(({ id, name, method, path, folderId }) => ({
+      id, name, method, path, folderId,
+    }));
   }
 
   /** 接口详情 */
@@ -40,7 +86,6 @@ export class EndpointService {
       description: input.description || '',
       tags: input.tags || [],
     };
-    // 复杂结构原样透传(调用方可先 get 拿现有结构再改)
     if (input.parameters !== undefined) payload.parameters = input.parameters;
     if (input.requestBody !== undefined) payload.requestBody = input.requestBody;
     if (input.responses !== undefined) payload.responses = input.responses;
@@ -73,14 +118,11 @@ export class EndpointService {
         await this.get(apiId, pid);
         throw new ApifoxError(`删除后接口 ${apiId} 仍可查到,删除可能失败`, { endpoint: 'http-apis' });
       } catch (err) {
-        if (err instanceof ApifoxError && err.status === 404) {
-          // 预期:删除后查不到
-          return { deleted: true };
-        }
+        if (err instanceof ApifoxError && err.status === 404) return { deleted: true };
         if (err instanceof ApifoxError && err.message.includes('仍可查到')) throw err;
-        // 其它错误(如 404 以外)忽略,视为已删
       }
     }
     return { deleted: true };
   }
 }
+

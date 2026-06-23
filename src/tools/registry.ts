@@ -61,7 +61,7 @@ export const tools: ToolDef[] = [
   },
   {
     name: 'apifox_list_endpoints',
-    description: '获取接口列表,可按模块过滤',
+    description: '获取接口列表,可按模块过滤。接口数量多时建议用 apifox_search_endpoints 按关键词精准检索,避免上下文爆炸',
     inputSchema: {
       type: 'object',
       properties: {
@@ -70,6 +70,32 @@ export const tools: ToolDef[] = [
       },
     },
     handler: (apifox, args) => apifox.endpoints.list(args.projectId, args.moduleId),
+  },
+  {
+    name: 'apifox_search_endpoints',
+    description:
+      '按关键词/方法/目录搜索接口(MCP 层过滤,避免全量列表导致上下文爆炸)。' +
+      '返回精简字段(id/name/method/path/folderId),需要完整详情再用 apifox_get_endpoint。' +
+      '推荐工作流:search_endpoints 定位 → get_endpoint 拿详情 → update_endpoint 修改。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        keyword: { type: 'string', description: '关键词,匹配接口名称或路径(不区分大小写)' },
+        method: { type: 'string', description: 'HTTP 方法过滤(GET/POST/PUT/DELETE/PATCH)' },
+        folderId: { type: 'number', description: '按目录 ID 过滤(配合 find_folder 使用)' },
+        moduleId: { type: ['string', 'number'], description: '模块 ID,可选' },
+        limit: { type: 'number', description: '最多返回条数,默认 20,最大 100' },
+        projectId: projectIdProp,
+      },
+    },
+    handler: (apifox, args) =>
+      apifox.endpoints.search(args.projectId, {
+        keyword: args.keyword,
+        method: args.method,
+        folderId: args.folderId,
+        moduleId: args.moduleId,
+        limit: args.limit,
+      }),
   },
   {
     name: 'apifox_get_endpoint',
@@ -230,8 +256,8 @@ export const tools: ToolDef[] = [
   {
     name: 'apifox_list_schemas',
     description:
-      '列出项目的数据模型(只读)。注:数据模型的创建只能通过 import_openapi,' +
-      '修改/删除需在 Apifox UI 操作(写端点对 personal token 返回 302)',
+      '列出项目的数据模型。创建/更新模型用 import_openapi(schemaOverwriteMode="name" 覆盖已有模型);' +
+      '删除用 apifox_delete_schema',
     inputSchema: {
       type: 'object',
       properties: {
@@ -240,6 +266,36 @@ export const tools: ToolDef[] = [
       },
     },
     handler: (apifox, args) => apifox.schemas.list(args.projectId, args.moduleId),
+  },
+  {
+    name: 'apifox_delete_schema',
+    description:
+      '删除数据模型(逆向 Apifox 客户端得到:DELETE /api/v1/api-schemas/{id} + X-Project-Id header)。' +
+      '先用 apifox_list_schemas 获取模型 id。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        schemaId: { type: 'number', description: '数据模型 ID(从 list_schemas 返回的 id 字段获取)' },
+        projectId: projectIdProp,
+      },
+      required: ['schemaId'],
+    },
+    handler: (apifox, args) => apifox.schemas.remove(args.schemaId, args.projectId),
+  },
+  {
+    name: 'apifox_delete_folder',
+    description:
+      '删除接口目录(逆向 Apifox 客户端得到 DELETE /api/v1/projects/{id}/api-folders/{folderId},personal token 可用)。' +
+      '先用 apifox_find_folder 或 apifox_list_folders 获取 folderId。注意:目录下的接口可能被一并删除。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        folderId: { type: 'number', description: '目录 ID(从 find_folder 或 list_folders 返回的 folderId 获取)' },
+        projectId: projectIdProp,
+      },
+      required: ['folderId'],
+    },
+    handler: (apifox, args) => apifox.folders.removeFolder(args.folderId, args.projectId),
   },
 ];
 
