@@ -72,6 +72,36 @@ describe('EndpointService 复杂字段透传', () => {
   });
 });
 
+describe('EndpointService.get 精简/全量', () => {
+  const RAW = {
+    id: 1, name: 'x', method: 'POST', path: '/x', description: 'd', status: 'developing',
+    tags: ['t'], folderId: 5, moduleId: 6, parameters: {}, requestBody: {}, responses: [],
+    // 噪音字段
+    createdAt: '2026', creatorId: 9, operationId: 'op', preProcessors: [], advancedSettings: {},
+  };
+  function svc(): EndpointService {
+    const fake = {
+      request: async () => ({ status: 200, data: { data: RAW } }),
+    } as unknown as AxiosInstance;
+    return new EndpointService(new HttpClient(cfg, fake));
+  }
+
+  it('默认精简:保留业务字段,去掉噪音', async () => {
+    const r = await svc().get(1);
+    expect(r.name).toBe('x');
+    expect(r.parameters).toBeDefined();
+    expect((r as any).createdAt).toBeUndefined();
+    expect((r as any).creatorId).toBeUndefined();
+    expect((r as any).preProcessors).toBeUndefined();
+  });
+
+  it('raw=true 返回全量', async () => {
+    const r = await svc().get(1, undefined, true);
+    expect((r as any).createdAt).toBe('2026');
+    expect((r as any).preProcessors).toEqual([]);
+  });
+});
+
 function importServiceWith(data: unknown): ImportExportService {
   const fake = {
     request: async () => ({ status: 200, data }),

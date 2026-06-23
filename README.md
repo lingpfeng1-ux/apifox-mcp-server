@@ -12,23 +12,35 @@ switching and read/write/import capabilities. Based on the Apifox API.
 
 所有工具都支持可选 `projectId` 参数,在调用时覆盖默认项目(多项目切换)。
 
-### 读操作
+返回均做了**上下文优化**:列表类工具返回精简索引(不含大字段),需要完整结构时用对应的 `get_*` 工具。
+
+### 读 / 检索
 - `apifox_get_project` — 项目详情
 - `apifox_list_modules` — 模块列表
 - `apifox_list_folders` — 列出指定模块下的目录(返回 moduleId/folderId/folderName/folderPath)
 - `apifox_find_folder` — 按模块名 + 目录名定位 moduleId/folderId
-- `apifox_list_endpoints` — 接口列表(可按 moduleId 过滤)
-- `apifox_get_endpoint` — 接口详情
-- `apifox_list_schemas` — 列出数据模型(只读,可按 moduleId 过滤)
+- `apifox_list_endpoints` — 接口索引列表(精简:id/name/method/path/folderId)
+- `apifox_search_endpoints` — 按 keyword/method/folderId 检索接口(精简索引,避免上下文爆炸)
+- `apifox_get_endpoint` — 接口详情(默认精简字段,`raw=true` 拿全量)
+- `apifox_list_schemas` — 数据模型索引(精简:id/name/folderId/description,支持 keyword 过滤)
+- `apifox_get_schema` — 单个数据模型完整 jsonSchema(按 id 或名称)
 
 ### 写操作
 - `apifox_create_endpoint` — 创建接口(带真实成功校验;支持 parameters/requestBody/responses)
 - `apifox_update_endpoint` — 更新接口(支持改 name/method/path/description 及 parameters/requestBody/responses)
 - `apifox_delete_endpoint` — 删除接口(可选 `verify` 删除后回查)
+- `apifox_delete_schema` — 删除数据模型
+- `apifox_delete_folder` — 删除接口目录
 
 ### 导入导出
-- `apifox_import_openapi` — 导入 OpenAPI/Swagger(JSON 或 YAML 字符串);**含 `components.schemas` 时会创建数据模型**
+- `apifox_import_openapi` — 导入 OpenAPI/Swagger;含 `components.schemas` 时创建/覆盖数据模型(`schemaOverwriteMode`)
 - `apifox_export_openapi` — 导出项目/模块为 OpenAPI(可按 moduleId、可选目录转 tag)
+
+## 推荐工作流(给 AI 高效使用)
+
+- **改某个接口**:`search_endpoints`(关键词找到 apiId)→ `get_endpoint`(拿结构)→ `update_endpoint`
+- **改某个数据模型字段**:`list_schemas`(keyword 找模型)→ `get_schema`(拿 jsonSchema)→ 修改 → `import_openapi`(`schemaOverwriteMode:"name"`)
+- 列表类工具只给索引,不要直接拿全量详情灌进上下文
 
 ## 接口的参数 / 请求体 / 响应
 

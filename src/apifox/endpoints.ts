@@ -2,13 +2,25 @@
  * 接口(HTTP API)CRUD + 搜索能力。
  * 写操作带真实成功校验:不再靠"没抛异常"就报成功。
  *
- * 注:Apifox /http-apis 服务端只支持 moduleId/ids 过滤,无服务端关键词搜索。
- * search() 在 MCP 层做内存过滤,避免 AI 拿全量列表导致上下文爆炸。
+ * 上下文优化:
+ *  - list/search 默认返回索引字段(id/name/method/path/folderId),不返回完整结构。
+ *  - get 默认返回精简字段(去 createdAt/creatorId/preProcessors 等噪音),raw=true 拿全量。
+ * 注:Apifox /http-apis 服务端只支持 moduleId/ids 过滤,无服务端关键词搜索,
+ * search() 在 MCP 层做内存过滤。
  */
 
 import { HttpClient } from './http';
 import { ApifoxError } from '../errors';
 import { EndpointInput, HttpApi } from './types';
+
+/** 接口索引(精简,用于列表/搜索) */
+export interface EndpointIndex {
+  id: number;
+  name: string;
+  method: string;
+  path: string;
+  folderId?: number;
+}
 
 export interface SearchEndpointsParams {
   /** 关键词:匹配接口名称或路径(不区分大小写) */
@@ -23,11 +35,29 @@ export interface SearchEndpointsParams {
   limit?: number;
 }
 
+/** get 精简模式保留的字段(AI 改接口真正需要的) */
+const ENDPOINT_DETAIL_FIELDS = [
+  'id', 'name', 'method', 'path', 'description', 'status', 'tags',
+  'folderId', 'moduleId', 'parameters', 'requestBody', 'responses',
+] as const;
+
+export function pickEndpointFields(data: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const k of ENDPOINT_DETAIL_FIELDS) {
+    if (data[k] !== undefined) out[k] = data[k];
+  }
+  return out;
+}
+
+function toIndex(api: HttpApi): EndpointIndex {
+  return { id: api.id, name: api.name, method: api.method, path: api.path, folderId: api.folderId };
+}
+
 export class EndpointService {
   constructor(private readonly http: HttpClient) {}
 
-  /** 接口列表,可按 moduleId 过滤(模块化项目需要 moduleId 才能拿到对应接口) */
-  async list(projectId?: string | number, moduleId?: string | number): Promise<HttpApi[]> {
+  /** 拉取接口全量(完整字段;内部用) */
+  private async fetchAll(projectId?: string | number, moduleId?: string | number): Promise<HttpApi[]> {
     const pid = this.http.resolveProjectId(projectId);
     const params: Record<string, any> = {};
     if (moduleId !== undefined && moduleId !== null && String(moduleId).trim() !== '') {
@@ -38,15 +68,20 @@ export class EndpointService {
   }
 
   /**
-   * 搜索接口:先拉取指定模块下的列表,再在 MCP 层按关键词/方法/目录过滤。
-   * 避免 AI 拿全量接口列表导致上下文爆炸。
-   * 返回精简字段(id/name/method/path/folderId),需要完整详情再用 get()。
+   * 接口列表(精简索引:id/name/method/path/folderId)。可按 moduleId 过滤。
+   * 需要完整结构用 get();按关键词找接口用 search()。
    */
-  async search(
-    projectId?: string | number,
-    params: SearchEndpointsParams = {}
-  ): Promise<Pick<HttpApi, 'id' | 'name' | 'method' | 'path' | 'folderId'>[]> {
-    const all = await this.list(projectId, params.moduleId);
+  async list(projectId?: string | number, moduleId?: string | number): Promise<EndpointIndex[]> {
+    const all = await this.fetchAll(projectId, moduleId);
+    return all.map(toIndex);
+  }
+
+  /**
+   * 搜索接口:拉取后在 MCP 层按关键词/方法/目录过滤,返回精简索引。
+   * 避免 AI 拿全量接口列表导致上下文爆炸。
+   */
+  async search(projectId?: string | number, params: SearchEndpointsParams = {}): Promise<EndpointIndex[]> {
+    const all = await this.fetchAll(projectId, params.moduleId);
     const keyword = params.keyword?.toLowerCase();
     const method = params.method?.toUpperCase();
     const limit = Math.min(params.limit ?? 20, 100);
@@ -62,16 +97,18 @@ export class EndpointService {
       return true;
     });
 
-    return filtered.slice(0, limit).map(({ id, name, method, path, folderId }) => ({
-      id, name, method, path, folderId,
-    }));
+    return filtered.slice(0, limit).map(toIndex);
   }
 
-  /** 接口详情 */
-  async get(apiId: number, projectId?: string | number): Promise<HttpApi> {
+  /**
+   * 接口详情。默认返回精简字段(去掉 createdAt/creatorId/preProcessors 等噪音),
+   * raw=true 时返回 Apifox 原始全量对象。
+   */
+  async get(apiId: number, projectId?: string | number, raw = false): Promise<Record<string, any>> {
     const pid = this.http.resolveProjectId(projectId);
     const body = await this.http.get(`/api/v1/projects/${pid}/http-apis/${apiId}`);
-    return (body?.data ?? body) as HttpApi;
+    const data = (body?.data ?? body) as Record<string, any>;
+    return raw ? data : pickEndpointFields(data);
   }
 
   /** 创建接口,校验返回真实 id */
@@ -125,4 +162,3 @@ export class EndpointService {
     return { deleted: true };
   }
 }
-

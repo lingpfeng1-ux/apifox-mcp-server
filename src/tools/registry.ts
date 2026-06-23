@@ -61,7 +61,9 @@ export const tools: ToolDef[] = [
   },
   {
     name: 'apifox_list_endpoints',
-    description: '获取接口列表,可按模块过滤。接口数量多时建议用 apifox_search_endpoints 按关键词精准检索,避免上下文爆炸',
+    description:
+      '列出接口索引(精简:id/name/method/path/folderId),可按模块过滤。' +
+      '按关键词精准找接口用 apifox_search_endpoints;拿单个接口完整结构用 apifox_get_endpoint。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -99,16 +101,21 @@ export const tools: ToolDef[] = [
   },
   {
     name: 'apifox_get_endpoint',
-    description: '获取指定接口详情',
+    description:
+      '获取接口详情(默认精简字段:name/method/path/description/parameters/requestBody/responses/folderId/tags/status)。' +
+      '若 requestBody/responses 里出现 $ref 引用数据模型,改字段应改模型本身' +
+      '(get_schema 拿模型 → 改 → import_openapi schemaOverwriteMode="name"),而不是改接口内联结构。' +
+      '需要 Apifox 全量原始字段时传 raw=true。',
     inputSchema: {
       type: 'object',
       properties: {
         apiId: { type: 'number', description: '接口 ID' },
+        raw: { type: 'boolean', description: '是否返回全量原始字段,默认 false(精简)' },
         projectId: projectIdProp,
       },
       required: ['apiId'],
     },
-    handler: (apifox, args) => apifox.endpoints.get(args.apiId, args.projectId),
+    handler: (apifox, args) => apifox.endpoints.get(args.apiId, args.projectId, args.raw === true),
   },
   {
     name: 'apifox_create_endpoint',
@@ -150,7 +157,10 @@ export const tools: ToolDef[] = [
   },
   {
     name: 'apifox_update_endpoint',
-    description: '更新接口信息(复杂结构建议先用 get_endpoint 拿到现有结构,改完再整体传入)',
+    description:
+      '更新接口信息(复杂结构建议先用 get_endpoint 拿现有结构,改完整体传入)。' +
+      '注意:若字段定义来自数据模型($ref 引用),应改模型(get_schema → import_openapi schemaOverwriteMode="name"),' +
+      '而不是在此把 $ref 改成内联结构。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -256,16 +266,39 @@ export const tools: ToolDef[] = [
   {
     name: 'apifox_list_schemas',
     description:
-      '列出项目的数据模型。创建/更新模型用 import_openapi(schemaOverwriteMode="name" 覆盖已有模型);' +
-      '删除用 apifox_delete_schema',
+      '列出数据模型索引(精简:id/name/folderId/description,不含 jsonSchema,避免上下文爆炸)。' +
+      '可用 keyword 按名/描述过滤。拿单个模型完整 jsonSchema 用 apifox_get_schema;' +
+      '创建/改模型用 import_openapi(schemaOverwriteMode="name");删除用 apifox_delete_schema。',
     inputSchema: {
       type: 'object',
       properties: {
+        keyword: { type: 'string', description: '关键词,匹配模型名或描述(不区分大小写)' },
         moduleId: { type: ['string', 'number'], description: '模块 ID,可选,按模块过滤' },
+        limit: { type: 'number', description: '最多返回条数,默认 50,最大 200' },
         projectId: projectIdProp,
       },
     },
-    handler: (apifox, args) => apifox.schemas.list(args.projectId, args.moduleId),
+    handler: (apifox, args) =>
+      apifox.schemas.list(args.projectId, {
+        keyword: args.keyword,
+        moduleId: args.moduleId,
+        limit: args.limit,
+      }),
+  },
+  {
+    name: 'apifox_get_schema',
+    description:
+      '获取单个数据模型的完整结构(含 jsonSchema),按 id 或名称定位。' +
+      '改模型字段流程:get_schema 拿 jsonSchema → 修改 → import_openapi(schemaOverwriteMode="name")覆盖。',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        idOrName: { type: ['number', 'string'], description: '数据模型 ID 或名称' },
+        projectId: projectIdProp,
+      },
+      required: ['idOrName'],
+    },
+    handler: (apifox, args) => apifox.schemas.get(args.idOrName, args.projectId),
   },
   {
     name: 'apifox_delete_schema',
