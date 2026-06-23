@@ -1,6 +1,10 @@
 # Apifox MCP Server
 
+[![CI](https://github.com/lingpfeng1-ux/apifox-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/lingpfeng1-ux/apifox-mcp-server/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![MCP](https://img.shields.io/badge/MCP-compatible-blue)
+![Tools](https://img.shields.io/badge/tools-18-orange)
 
 [简体中文](./README.md) | **English**
 
@@ -86,6 +90,16 @@ Startup args (all optional):
 ## Recommended Workflow (for efficient AI use)
 
 Designed as **index → detail → modify** so agents locate and edit a single item with minimal context:
+
+```mermaid
+flowchart LR
+  subgraph Edit endpoint
+    A[search_endpoints<br/>locate by keyword] --> B[get_endpoint<br/>get structure] --> C[update_endpoint<br/>modify]
+  end
+  subgraph Edit data model
+    D[list_schemas<br/>find by keyword] --> E[get_schema<br/>get jsonSchema] --> F[import_openapi<br/>schemaOverwriteMode=name]
+  end
+```
 
 - **Edit an endpoint**: `search_endpoints` (find apiId by keyword) → `get_endpoint` (get structure) → `update_endpoint`
 - **Edit a data-model field**: `list_schemas` (keyword) → `get_schema` (get jsonSchema) → edit → `import_openapi` (`schemaOverwriteMode:"name"`)
@@ -215,6 +229,10 @@ docs/                 design & implementation docs
 | `apifox_create_schema` | (removed) | use `import_openapi` to create models |
 
 New: `apifox_search_endpoints`, `apifox_get_schema`, `apifox_delete_schema`, `apifox_delete_folder`.
+
+## Contributing
+
+PRs welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for dev setup and commit conventions.
 
 ## License
 

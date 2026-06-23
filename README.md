@@ -1,6 +1,10 @@
 # Apifox MCP Server
 
+[![CI](https://github.com/lingpfeng1-ux/apifox-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/lingpfeng1-ux/apifox-mcp-server/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen)
+![MCP](https://img.shields.io/badge/MCP-compatible-blue)
+![Tools](https://img.shields.io/badge/tools-18-orange)
 
 **简体中文** | [English](./README.en.md)
 
@@ -86,6 +90,16 @@ npm run build
 ## 推荐工作流(给 AI 高效使用)
 
 设计为「**索引 → 详情 → 修改**」三段式,用最少上下文精准定位并改动:
+
+```mermaid
+flowchart LR
+  subgraph 改接口
+    A[search_endpoints<br/>关键词定位] --> B[get_endpoint<br/>拿结构] --> C[update_endpoint<br/>修改]
+  end
+  subgraph 改数据模型
+    D[list_schemas<br/>keyword 找模型] --> E[get_schema<br/>拿 jsonSchema] --> F[import_openapi<br/>schemaOverwriteMode=name]
+  end
+```
 
 - **改某个接口**:`search_endpoints`(关键词找到 apiId)→ `get_endpoint`(拿结构)→ `update_endpoint`
 - **改某个数据模型字段**:`list_schemas`(keyword 找模型)→ `get_schema`(拿 jsonSchema)→ 修改 → `import_openapi`(`schemaOverwriteMode:"name"`)
@@ -215,6 +229,10 @@ docs/                 设计与实现文档
 | `apifox_create_schema` | (移除) | 改用 `import_openapi` 创建模型 |
 
 新增:`apifox_search_endpoints`、`apifox_get_schema`、`apifox_delete_schema`、`apifox_delete_folder`。
+
+## 贡献
+
+欢迎提 PR。开发与提交规范见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 ## License
 
