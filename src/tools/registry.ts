@@ -329,12 +329,14 @@ export const tools: ToolDef[] = [
   {
     name: 'apifox_update_schema',
     description:
-      '更新已有数据模型的结构(按 id 或名称定位,内部自动组装 OpenAPI 并覆盖导入)。' +
-      'jsonSchema 为完整新结构,建议先 get_schema 拿现有结构改完整传。',
+      '精确更新已有数据模型的结构(PUT /api/v1/api-schemas/{id},按 schema id 精确更新)。' +
+      '⚠️ 项目可能存在多个同名模型,务必用接口实际引用的 id:从 get_endpoint(raw=true) 的 ' +
+      'requestBody/responses 里的 $ref(#/definitions/{id})取到那个 id 再传入。' +
+      '传名称且有多个同名时会报错并列出各 id。jsonSchema 为完整新结构(建议先 get_schema 拿现有改完传)。',
     inputSchema: {
       type: 'object',
       properties: {
-        idOrName: { type: ['number', 'string'], description: '数据模型 ID 或名称' },
+        idOrName: { type: ['number', 'string'], description: '数据模型 ID(优先,精确)或名称' },
         jsonSchema: { type: 'object', description: '完整的新 JSON Schema 定义' },
         projectId: projectIdProp,
       },

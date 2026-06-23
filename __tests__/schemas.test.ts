@@ -108,22 +108,36 @@ describe('SchemaService.upsert / update', () => {
     expect(spec.components.schemas.UserReq).toEqual({ type: 'object', required: ['name'] });
   });
 
-  it('update 传 id 时先解析出模型名再覆盖', async () => {
-    let lastBody: any;
+  it('update 按 id 精确 PUT(带 X-Project-Id),不走按名 import', async () => {
+    let putUrl = '', putHeaders: any, putBody: any;
     const fake = {
       request: async (c: AxiosRequestConfig) => {
         const url = c.url || '';
-        if ((c.method || 'get').toLowerCase() === 'get' && url.endsWith('/data-schemas')) {
+        const method = (c.method || 'get').toLowerCase();
+        if (method === 'get' && url.endsWith('/data-schemas')) {
           return { status: 200, data: { data: SCHEMAS } };
         }
-        lastBody = c.data;
-        return { status: 200, data: { data: { schemaCollection: { item: { createCount: 0, updateCount: 1 } } } } };
+        if (method === 'put') {
+          putUrl = url; putHeaders = c.headers; putBody = c.data;
+          return { status: 200, data: { data: { id: 2, name: 'UserResp', jsonSchema: c.data.jsonSchema } } };
+        }
+        return { status: 404, data: { errorMessage: 'x' } };
       },
     } as unknown as AxiosInstance;
     const svc = schemaService(fake);
-    const r = await svc.update(2, { type: 'object', properties: { id: { type: 'integer' } } });
-    // id=2 → name "UserResp"
-    expect(JSON.parse(lastBody.data).components.schemas.UserResp).toBeDefined();
-    expect(r.schemaUpdateCount).toBe(1);
+    const r = await svc.update(2, { type: 'object', properties: { id: { type: 'integer' } } }, 1);
+    expect(putUrl).toBe('/api/v1/api-schemas/2');     // 精确到 id=2,非按名
+    expect(putHeaders['X-Project-Id']).toBe('1');
+    expect(putBody.jsonSchema).toEqual({ type: 'object', properties: { id: { type: 'integer' } } });
+    expect(r.id).toBe(2);
+  });
+
+  it('传名称且有多个同名时报错并列出 id', async () => {
+    const dup = [
+      { id: 100, name: 'Dup', moduleId: 1, jsonSchema: {} },
+      { id: 200, name: 'Dup', moduleId: 2, jsonSchema: {} },
+    ];
+    const svc = svcReturning(dup);
+    await expect(svc.update('Dup', { type: 'object' })).rejects.toThrowError(/请改用 id 精确指定/);
   });
 });

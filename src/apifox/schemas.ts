@@ -115,16 +115,45 @@ export class SchemaService {
   }
 
   /**
-   * 更新已有数据模型的结构(按 id 或名称定位)。
-   * import 按"模型名"覆盖,故传 id 时先解析出名称。
+   * 精确更新已有数据模型的结构(按 id 或名称定位)。
+   *
+   * 关键:走 PUT /api/v1/api-schemas/{id}(+X-Project-Id),**按 schema id 精确更新**,
+   * 不再用按名 import——因为项目里可能存在多个同名模型(不同模块/历史导入),
+   * 按名覆盖会改错那一份。建议从接口的 $ref(#/definitions/{id})拿到精确 id 再传入。
+   *
+   * 传名称且存在多个同名时,抛错并列出各 id/moduleId,要求改用 id 指定。
    * jsonSchema 为完整新结构(建议先 get() 拿现有结构改完整传)。
    */
-  async update(idOrName: number | string, jsonSchema: unknown, projectId?: string | number): Promise<ImportSummary> {
-    let name = String(idOrName);
-    if (typeof idOrName === 'number' || /^\d+$/.test(name)) {
-      name = (await this.get(idOrName, projectId)).name;
+  async update(idOrName: number | string, jsonSchema: unknown, projectId?: string | number): Promise<DataSchema> {
+    const pid = this.http.resolveProjectId(projectId);
+    const all = await this.fetchAll(projectId);
+    const isId = typeof idOrName === 'number' || /^\d+$/.test(String(idOrName));
+
+    let target: DataSchema | undefined;
+    if (isId) {
+      target = all.find((s) => s.id === Number(idOrName));
+    } else {
+      const matches = all.filter(
+        (s) => s.name === idOrName || s.name?.toLowerCase() === String(idOrName).toLowerCase()
+      );
+      if (matches.length > 1) {
+        throw new ApifoxError(
+          `存在 ${matches.length} 个名为「${idOrName}」的数据模型,请改用 id 精确指定:` +
+            matches.map((m) => `id=${m.id}(moduleId=${m.moduleId})`).join('; '),
+          { endpoint: 'api-schemas' }
+        );
+      }
+      target = matches[0];
     }
-    return this.upsert(name, jsonSchema, projectId);
+    if (!target) {
+      throw new ApifoxError(`未找到数据模型「${idOrName}」`, { endpoint: 'api-schemas' });
+    }
+
+    const resp = await this.http.request('put', `/api/v1/api-schemas/${target.id}`, {
+      headers: { 'X-Project-Id': pid },
+      data: { ...target, jsonSchema },
+    });
+    return (resp?.data ?? resp) as DataSchema;
   }
 
   /**

@@ -137,9 +137,15 @@ apifox_find_folder({ projectId: 7834388, moduleName: "KAZ-PDP -接口", folderNa
 |---|---|
 | 读列表 | `list_schemas`(精简索引,支持 keyword) |
 | 读单个 | `get_schema`(完整 jsonSchema) |
-| 创建 | `import_openapi`,在 `components.schemas` 定义、`paths` 用 `$ref` 引用 |
-| 改字段 | `import_openapi` 重导同名模型 + `schemaOverwriteMode:"name"`(默认 `ignore` 不覆盖) |
+| 创建 | `create_schema`(name + jsonSchema),或 `import_openapi`(批量带 `$ref`) |
+| 改字段 | `update_schema`(按 schema **id** 精确 PUT) |
 | 删除 | `delete_schema` |
+
+> ⚠️ **同名模型坑(重要)**:Apifox 项目里可能存在多个同名数据模型(不同模块/历史导入)。
+> 接口通过 `$ref: #/definitions/{id}` 精确引用其中一份。改模型务必用**接口实际引用的 id**:
+> `get_endpoint(raw=true)` → 看 `requestBody`/`responses` 里的 `$ref` 取 id → `update_schema(那个 id, ...)`。
+> `update_schema` 走 `PUT /api/v1/api-schemas/{id}` **按 id 精确更新**,不会误改到别的同名模型;
+> 传名称且存在多个同名时会报错并列出各 id。
 
 ```jsonc
 // 创建带数据模型的接口

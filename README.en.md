@@ -137,9 +137,16 @@ apifox_find_folder({ projectId: 7834388, moduleName: "KAZ-PDP -接口", folderNa
 |---|---|
 | List | `list_schemas` (slim index, keyword filter) |
 | Get one | `get_schema` (full jsonSchema) |
-| Create | `import_openapi` with `components.schemas` + `$ref` in `paths` |
-| Edit fields | `import_openapi` re-importing the same-named model + `schemaOverwriteMode:"name"` (default `ignore` won't overwrite) |
+| Create | `create_schema` (name + jsonSchema), or `import_openapi` (batch with `$ref`) |
+| Edit fields | `update_schema` (precise PUT by schema **id**) |
 | Delete | `delete_schema` |
+
+> ⚠️ **Duplicate-name pitfall (important)**: an Apifox project may contain multiple data models
+> with the same name (different modules / past imports). An endpoint references a specific one via
+> `$ref: #/definitions/{id}`. To edit a model, always use the id the endpoint actually references:
+> `get_endpoint(raw=true)` → read the `$ref` id in `requestBody`/`responses` → `update_schema(thatId, ...)`.
+> `update_schema` uses `PUT /api/v1/api-schemas/{id}` to update **by id precisely** (won't hit the
+> wrong same-named model); passing a name with multiple matches errors out and lists the ids.
 
 ```jsonc
 // Create an endpoint that references data models
