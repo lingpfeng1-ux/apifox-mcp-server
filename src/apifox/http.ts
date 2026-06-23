@@ -83,7 +83,12 @@ export class HttpClient {
       );
     }
 
-    // 2xx 但空 body:失效端点(如 /api-tree、/schemas GET)典型表现
+    // 204/205 等无内容成功状态码:允许空 body,直接返回 null
+    if (status === 204 || status === 205) {
+      return null as T;
+    }
+
+    // 200 但空 body:失效端点(如 /api-tree、/schemas GET)典型表现
     if (data === '' || data === null || data === undefined) {
       throw new ApifoxError(
         `端点 ${path} 返回空响应(HTTP ${status}),该端点可能对当前 access token 不可用`,

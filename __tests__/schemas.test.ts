@@ -92,29 +92,41 @@ describe('SchemaService.remove', () => {
 });
 
 describe('SchemaService.upsert / update', () => {
-  it('upsert 组装最小 OpenAPI 并带 schemaOverwriteMode=name,返回 id/created', async () => {
+  it('upsert 新建:import 后用前后 diff 定位新 id,返回 {name,id,created}', async () => {
     let body: any;
+    let phase = 0; // 0=import前fetchAll, 1=import, 2=import后fetchAll
     const fake = {
       request: async (c: AxiosRequestConfig) => {
         const url = c.url || '';
-        // 回查 id 的 GET
-        if ((c.method || 'get').toLowerCase() === 'get' && url.endsWith('/data-schemas')) {
-          return { status: 200, data: { data: [{ id: 999, name: 'UserReq', jsonSchema: {} }] } };
+        const method = (c.method || 'get').toLowerCase();
+        if (method === 'get' && url.endsWith('/data-schemas')) {
+          phase++;
+          // 第一次(import前):无同名;第二次(import后):多出 id=999
+          return phase === 1
+            ? { status: 200, data: { data: [{ id: 1, name: 'Other' }] } }
+            : { status: 200, data: { data: [{ id: 1, name: 'Other' }, { id: 999, name: 'NewModel' }] } };
         }
-        body = c.data; // import 的 POST body
-        return { status: 200, data: { data: { schemaCollection: { item: { createCount: 1, updateCount: 0 } } } } };
+        body = c.data; // import POST
+        return { status: 200, data: { data: { schemaCollection: { item: { createCount: 1 } } } } };
       },
     } as unknown as AxiosInstance;
     const svc = schemaService(fake);
-    const r = await svc.upsert('UserReq', { type: 'object', required: ['name'] });
+    const r = await svc.upsert('NewModel', { type: 'object' });
     expect(body.importFormat).toBe('openapi');
     expect(body.schemaOverwriteMode).toBe('name');
-    expect(JSON.parse(body.data).components.schemas.UserReq).toEqual({ type: 'object', required: ['name'] });
-    // 返回精简明确结果
-    expect(r).toEqual({ name: 'UserReq', id: 999, created: true, updated: false });
+    expect(JSON.parse(body.data).components.schemas.NewModel).toEqual({ type: 'object' });
+    expect(r).toEqual({ name: 'NewModel', id: 999, created: true });
   });
 
-  it('update 按 id 精确 PUT(带 X-Project-Id),不走按名 import', async () => {
+  it('upsert 遇已有同名模型 -> 抛错并列出 id(防误覆盖)', async () => {
+    const svc = svcReturning([
+      { id: 100, name: 'Dup', moduleId: 1 },
+      { id: 200, name: 'Dup', moduleId: 2 },
+    ]);
+    await expect(svc.upsert('Dup', { type: 'object' })).rejects.toThrowError(/已存在 2 个名为/);
+  });
+
+  it('update 按 id 精确 PUT,body 最小化(只含 name+jsonSchema,不带系统字段)', async () => {
     let putUrl = '', putHeaders: any, putBody: any;
     const fake = {
       request: async (c: AxiosRequestConfig) => {
@@ -135,10 +147,12 @@ describe('SchemaService.upsert / update', () => {
     expect(putUrl).toBe('/api/v1/api-schemas/2');     // 精确到 id=2,非按名
     expect(putHeaders['X-Project-Id']).toBe('1');
     expect(putBody.jsonSchema).toEqual({ type: 'object', properties: { id: { type: 'integer' } } });
+    // body 最小化:只有 name + jsonSchema,不带 creatorId/createdAt 等
+    expect(Object.keys(putBody).sort()).toEqual(['jsonSchema', 'name']);
     expect(r.id).toBe(2);
   });
 
-  it('传名称且有多个同名时报错并列出 id', async () => {
+  it('update 传名称且有多个同名时报错并列出 id', async () => {
     const dup = [
       { id: 100, name: 'Dup', moduleId: 1, jsonSchema: {} },
       { id: 200, name: 'Dup', moduleId: 2, jsonSchema: {} },

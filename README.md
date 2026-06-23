@@ -42,8 +42,8 @@
 | `apifox_create_endpoint` | 创建接口(可传 folderId 或 folderName+moduleName 自动定位目录;支持 parameters/requestBody/responses) |
 | `apifox_update_endpoint` | 更新接口(同样支持 folderName 移动目录) |
 | `apifox_delete_endpoint` | 删除接口(可选 `verify` 删除后回查) |
-| `apifox_create_schema` | 创建数据模型(只需 name + jsonSchema,内部自动组装导入) |
-| `apifox_update_schema` | 更新数据模型结构(按 id/名称,内部自动覆盖导入) |
+| `apifox_create_schema` | 创建数据模型(只需 name + jsonSchema;同名已存在则报错,防误覆盖) |
+| `apifox_update_schema` | 更新数据模型结构(按 schema **id** 精确 PUT,不会误改同名模型) |
 | `apifox_delete_schema` | 删除数据模型(不可逆) |
 | `apifox_delete_folder` | 删除接口目录(支持 `dryRun` 预览将删除的接口) |
 
@@ -234,7 +234,7 @@ docs/                 设计与实现文档
 | `apifox_get_folders` | `apifox_list_folders` | 重命名 + 重写(原实现失效) |
 | `apifox_create_folder` | (移除) | 改用 `import_openapi` 建目录 |
 | `apifox_get_schemas` | `apifox_list_schemas` + `apifox_get_schema` | 拆为索引 + 详情 |
-| `apifox_create_schema` | (移除) | 改用 `import_openapi` 创建模型 |
+| `apifox_create_schema` | `apifox_create_schema`(重写) | 改为 name+jsonSchema 自动导入,同名报错 |
 
 新增:`apifox_search_endpoints`、`apifox_get_schema`、`apifox_delete_schema`、`apifox_delete_folder`。
 

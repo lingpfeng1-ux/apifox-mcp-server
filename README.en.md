@@ -42,8 +42,8 @@ Every tool accepts an optional `projectId` to override the default project.
 | `apifox_create_endpoint` | Create endpoint (folderId or folderName+moduleName auto-resolve; supports parameters/requestBody/responses) |
 | `apifox_update_endpoint` | Update endpoint (folderName supported to move folder) |
 | `apifox_delete_endpoint` | Delete endpoint (optional `verify` re-check) |
-| `apifox_create_schema` | Create data model (just name + jsonSchema; spec auto-assembled & imported) |
-| `apifox_update_schema` | Update data model structure (by id/name; auto overwrite-import) |
+| `apifox_create_schema` | Create data model (name + jsonSchema; errors if same-name exists, to prevent accidental overwrite) |
+| `apifox_update_schema` | Update data model structure (precise PUT by schema **id**, won't hit wrong same-named model) |
 | `apifox_delete_schema` | Delete data model (irreversible) |
 | `apifox_delete_folder` | Delete endpoint folder (supports `dryRun` to preview affected endpoints) |
 
@@ -235,7 +235,7 @@ docs/                 design & implementation docs
 | `apifox_get_folders` | `apifox_list_folders` | renamed + rewritten (old impl was broken) |
 | `apifox_create_folder` | (removed) | use `import_openapi` to create folders |
 | `apifox_get_schemas` | `apifox_list_schemas` + `apifox_get_schema` | split into index + detail |
-| `apifox_create_schema` | (removed) | use `import_openapi` to create models |
+| `apifox_create_schema` | `apifox_create_schema` (rewritten) | now name+jsonSchema auto-import; errors on same-name |
 
 New: `apifox_search_endpoints`, `apifox_get_schema`, `apifox_delete_schema`, `apifox_delete_folder`.
 

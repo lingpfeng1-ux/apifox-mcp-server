@@ -99,36 +99,42 @@ export class SchemaService {
   }
 
   /**
-   * 创建或覆盖一个数据模型(按模型名)。
-   * 内部组装最小 OpenAPI(components.schemas)并 import(schemaOverwriteMode="name"),
-   * 免去 AI 手搓完整 OpenAPI 包装。同名存在则覆盖更新,不存在则创建。
-   * 返回精简明确结果(含回查到的 id),不暴露 import 的原始统计。
+   * 创建一个新数据模型(按模型名)。
+   * 内部组装最小 OpenAPI(components.schemas)并 import,免去 AI 手搓完整 OpenAPI 包装。
+   *
+   * 防误覆盖:若项目已存在同名模型则抛错(列出各 id),要求改用 update_schema 按 id 精确改;
+   * 避免 schemaOverwriteMode='name' 覆盖掉别处的同名模型。
+   * 新建成功后用 import 前后的 id 集合 diff 精确定位新模型 id(不靠按名回查,避免同名歧义)。
    */
   async upsert(
     name: string,
     jsonSchema: unknown,
     projectId?: string | number
-  ): Promise<{ name: string; id?: number; created: boolean; updated: boolean }> {
+  ): Promise<{ name: string; id?: number; created: boolean }> {
+    const before = await this.fetchAll(projectId);
+    const dups = before.filter((s) => s.name === name);
+    if (dups.length > 0) {
+      throw new ApifoxError(
+        `已存在 ${dups.length} 个名为「${name}」的数据模型(${dups
+          .map((d) => `id=${d.id}/moduleId=${d.moduleId}`)
+          .join(', ')})。如需修改请用 update_schema 按 id 精确改;如确需新建,请换一个模型名。`,
+        { endpoint: 'data-schemas' }
+      );
+    }
+
     const spec = JSON.stringify({
       openapi: '3.0.1',
-      info: { title: 'schema-upsert', version: '1.0.0' },
+      info: { title: 'schema-create', version: '1.0.0' },
       paths: {},
       components: { schemas: { [name]: jsonSchema } },
     });
-    const summary = await this.importExport.importOpenAPI(spec, { projectId, schemaOverwriteMode: 'name' });
-    // 回查 id,让调用方拿到模型 id 直接引用,免去再 list 一次
-    let id: number | undefined;
-    try {
-      id = (await this.get(name, projectId)).id;
-    } catch {
-      /* 回查失败不影响主结果 */
-    }
-    return {
-      name,
-      id,
-      created: summary.schemaCreateCount > 0,
-      updated: summary.schemaUpdateCount > 0,
-    };
+    await this.importExport.importOpenAPI(spec, { projectId, schemaOverwriteMode: 'name' });
+
+    // diff 定位新建的 id(避免按名回查在同名时取错)
+    const after = await this.fetchAll(projectId);
+    const beforeIds = new Set(before.map((s) => s.id));
+    const created = after.find((s) => s.name === name && !beforeIds.has(s.id));
+    return { name, id: created?.id, created: true };
   }
 
   /**
@@ -139,7 +145,7 @@ export class SchemaService {
    * 按名覆盖会改错那一份。建议从接口的 $ref(#/definitions/{id})拿到精确 id 再传入。
    *
    * 传名称且存在多个同名时,抛错并列出各 id/moduleId,要求改用 id 指定。
-   * jsonSchema 为完整新结构(建议先 get() 拿现有结构改完整传)。
+   * jsonSchema 为完整新结构。PUT 是 merge 语义:只传 name+jsonSchema,folderId/description 等保留。
    */
   async update(idOrName: number | string, jsonSchema: unknown, projectId?: string | number): Promise<DataSchema> {
     const pid = this.http.resolveProjectId(projectId);
@@ -166,9 +172,11 @@ export class SchemaService {
       throw new ApifoxError(`未找到数据模型「${idOrName}」`, { endpoint: 'api-schemas' });
     }
 
+    // 只传必要字段:PUT 是 merge 语义,未传字段(folderId/description 等)服务端保留;
+    // 不回传 creatorId/editorId/createdAt 等系统字段。
     const resp = await this.http.request('put', `/api/v1/api-schemas/${target.id}`, {
       headers: { 'X-Project-Id': pid },
-      data: { ...target, jsonSchema },
+      data: { name: target.name, jsonSchema },
     });
     return (resp?.data ?? resp) as DataSchema;
   }

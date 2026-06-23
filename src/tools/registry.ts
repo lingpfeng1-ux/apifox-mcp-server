@@ -62,16 +62,20 @@ export const tools: ToolDef[] = [
   {
     name: 'apifox_list_endpoints',
     description:
-      '列出接口索引(精简:id/name/method/path/folderId),可按模块过滤。' +
+      '列出接口索引(精简:id/name/method/path/folderId),可按模块过滤(moduleId 或 moduleName)。' +
       '按关键词精准找接口用 apifox_search_endpoints;拿单个接口完整结构用 apifox_get_endpoint。',
     inputSchema: {
       type: 'object',
       properties: {
-        moduleId: { type: ['string', 'number'], description: '模块 ID,可选。模块化项目建议指定' },
+        moduleId: { type: ['string', 'number'], description: '模块 ID,可选' },
+        moduleName: { type: 'string', description: '模块名,可选(替代 moduleId,自动解析)' },
         projectId: projectIdProp,
       },
     },
-    handler: (apifox, args) => apifox.endpoints.list(args.projectId, args.moduleId),
+    handler: async (apifox, args) => {
+      const moduleId = await resolveModuleId(apifox, args);
+      return apifox.endpoints.list(args.projectId, moduleId);
+    },
   },
   {
     name: 'apifox_search_endpoints',
@@ -86,18 +90,21 @@ export const tools: ToolDef[] = [
         method: { type: 'string', description: 'HTTP 方法过滤(GET/POST/PUT/DELETE/PATCH)' },
         folderId: { type: 'number', description: '按目录 ID 过滤(配合 find_folder 使用)' },
         moduleId: { type: ['string', 'number'], description: '模块 ID,可选' },
+        moduleName: { type: 'string', description: '模块名,可选(替代 moduleId,自动解析)' },
         limit: { type: 'number', description: '最多返回条数,默认 20,最大 100' },
         projectId: projectIdProp,
       },
     },
-    handler: (apifox, args) =>
-      apifox.endpoints.search(args.projectId, {
+    handler: async (apifox, args) => {
+      const moduleId = await resolveModuleId(apifox, args);
+      return apifox.endpoints.search(args.projectId, {
         keyword: args.keyword,
         method: args.method,
         folderId: args.folderId,
-        moduleId: args.moduleId,
+        moduleId,
         limit: args.limit,
-      }),
+      });
+    },
   },
   {
     name: 'apifox_get_endpoint',
@@ -284,22 +291,25 @@ export const tools: ToolDef[] = [
       properties: {
         keyword: { type: 'string', description: '关键词,匹配模型名或描述(不区分大小写)' },
         moduleId: { type: ['string', 'number'], description: '模块 ID,可选,按模块过滤' },
+        moduleName: { type: 'string', description: '模块名,可选(替代 moduleId,自动解析)' },
         limit: { type: 'number', description: '最多返回条数,默认 50,最大 200' },
         projectId: projectIdProp,
       },
     },
-    handler: (apifox, args) =>
-      apifox.schemas.list(args.projectId, {
+    handler: async (apifox, args) => {
+      const moduleId = await resolveModuleId(apifox, args);
+      return apifox.schemas.list(args.projectId, {
         keyword: args.keyword,
-        moduleId: args.moduleId,
+        moduleId,
         limit: args.limit,
-      }),
+      });
+    },
   },
   {
     name: 'apifox_get_schema',
     description:
       '获取单个数据模型的完整结构(含 jsonSchema),按 id 或名称定位。' +
-      '改模型字段流程:get_schema 拿 jsonSchema → 修改 → import_openapi(schemaOverwriteMode="name")覆盖。',
+      '改模型字段流程:get_schema 拿 jsonSchema → 修改 → update_schema(按 id 精确)传回。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -313,8 +323,9 @@ export const tools: ToolDef[] = [
   {
     name: 'apifox_create_schema',
     description:
-      '创建数据模型(只需给模型名 + jsonSchema,内部自动组装 OpenAPI 并导入,无需手搓 spec)。' +
-      '同名模型已存在时会被覆盖更新。',
+      '创建新数据模型(只需给模型名 + jsonSchema,内部自动组装 OpenAPI 并导入,无需手搓 spec)。' +
+      '若项目已存在同名模型会报错(列出各 id),请改用 update_schema 按 id 精确改,或换一个模型名。' +
+      '成功返回 { name, id, created }。',
     inputSchema: {
       type: 'object',
       properties: {
@@ -363,14 +374,15 @@ export const tools: ToolDef[] = [
     name: 'apifox_delete_folder',
     description:
       '删除接口目录(DELETE /api/v1/projects/{id}/api-folders/{folderId})。' +
-      '⚠️ 目录下的接口会被一并删除,不可逆。建议先用 dryRun=true 预览将受影响的接口,确认后再真正删除。' +
+      '⚠️ 会递归删除该目录及其子目录下的所有接口,不可逆。强烈建议先用 dryRun=true 预览;' +
+      '传 moduleId 才能统计整棵子树(返回 includesSubfolders=true),否则只统计直接子接口。' +
       'folderId 从 find_folder / list_folders 获取。',
     inputSchema: {
       type: 'object',
       properties: {
         folderId: { type: 'number', description: '目录 ID(从 find_folder 或 list_folders 获取)' },
         dryRun: { type: 'boolean', description: 'true 时只预览将被删除的接口,不真正删除' },
-        moduleId: { type: ['string', 'number'], description: '模块 ID,可选,缩小统计范围' },
+        moduleId: { type: ['string', 'number'], description: '模块 ID,建议传(才能统计子目录接口)' },
         projectId: projectIdProp,
       },
       required: ['folderId'],
@@ -403,6 +415,22 @@ async function resolveFolderId(apifox: Apifox, args: Record<string, any>): Promi
   if (args.folderName && args.moduleName) {
     const r = await apifox.folders.findFolder(args.moduleName, args.folderName, args.projectId);
     return r.folderId;
+  }
+  return undefined;
+}
+
+/**
+ * 解析 moduleId:优先用显式 moduleId;否则若给了 moduleName 则用 resolveModule 解析。
+ * 与 find_folder/create_endpoint 的 moduleName 用法对齐。
+ */
+async function resolveModuleId(
+  apifox: Apifox,
+  args: Record<string, any>
+): Promise<string | number | undefined> {
+  if (args.moduleId != null && String(args.moduleId).trim() !== '') return args.moduleId;
+  if (args.moduleName) {
+    const m = await apifox.projects.resolveModule(args.moduleName, args.projectId);
+    return m.id;
   }
   return undefined;
 }

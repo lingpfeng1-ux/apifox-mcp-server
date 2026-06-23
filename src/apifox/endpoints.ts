@@ -35,10 +35,11 @@ export interface SearchEndpointsParams {
   limit?: number;
 }
 
-/** get 精简模式保留的字段(AI 改接口真正需要的) */
+/** get 精简模式保留的字段(AI 改接口真正需要的业务字段) */
 const ENDPOINT_DETAIL_FIELDS = [
   'id', 'name', 'method', 'path', 'description', 'status', 'tags',
-  'folderId', 'moduleId', 'parameters', 'requestBody', 'responses',
+  'folderId', 'moduleId', 'parameters', 'commonParameters', 'requestBody',
+  'responses', 'auth', 'security', 'serverId', 'operationId',
 ] as const;
 
 export function pickEndpointFields(data: Record<string, any>): Record<string, any> {
@@ -155,8 +156,10 @@ export class EndpointService {
         await this.get(apiId, pid);
         throw new ApifoxError(`删除后接口 ${apiId} 仍可查到,删除可能失败`, { endpoint: 'http-apis' });
       } catch (err) {
+        // 仅 404 视为删除成功;其它错误(含"仍可查到"、302、空响应、网络错)一律重抛,
+        // 不再默默当成功,避免误报删除结果。
         if (err instanceof ApifoxError && err.status === 404) return { deleted: true };
-        if (err instanceof ApifoxError && err.message.includes('仍可查到')) throw err;
+        throw err;
       }
     }
     return { deleted: true };

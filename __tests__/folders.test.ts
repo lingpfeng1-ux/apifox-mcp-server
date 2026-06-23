@@ -79,3 +79,51 @@ describe('FolderService.findFolder', () => {
     await expect(buildFolderService().findFolder('ModA', 'Nope')).rejects.toThrowError(/未找到目录/);
   });
 });
+
+describe('FolderService.removeFolder dryRun(子树统计)', () => {
+  // 父目录 P(folderId=50)有接口 /p/a;子目录 P/C(folderId=51)有接口 /p/c/b
+  const APIS2 = [
+    { id: 1, name: 'pa', method: 'get', path: '/p/a', folderId: 50 },
+    { id: 2, name: 'pcb', method: 'get', path: '/p/c/b', folderId: 51 },
+    { id: 3, name: 'other', method: 'get', path: '/other', folderId: 99 },
+  ];
+  const OPENAPI2 = {
+    paths: {
+      '/p/a': { get: { 'x-apifox-folder': 'P' } },
+      '/p/c/b': { get: { 'x-apifox-folder': 'P/C' } },
+      '/other': { get: { 'x-apifox-folder': 'Other' } },
+    },
+  };
+  function svc(): FolderService {
+    const fake = {
+      request: async (c: AxiosRequestConfig) => {
+        const url = c.url || '';
+        const method = (c.method || 'get').toLowerCase();
+        if (url.endsWith('/modules')) return { status: 200, data: { data: MODULES } };
+        if (url.includes('/http-apis')) return { status: 200, data: { data: APIS2 } };
+        if (url.endsWith('/export-openapi') && method === 'post') return { status: 200, data: OPENAPI2 };
+        if (method === 'delete') return { status: 200, data: { success: true, data: null } };
+        return { status: 404, data: { errorMessage: 'nf' } };
+      },
+    } as unknown as AxiosInstance;
+    const http = new HttpClient(cfg, fake);
+    const projects = new ProjectService(http);
+    const endpoints = new EndpointService(http);
+    const ie = new ImportExportService(http);
+    return new FolderService(http, projects, endpoints, ie);
+  }
+
+  it('删父目录 dryRun:含子目录接口(includesSubfolders=true)', async () => {
+    const r = (await svc().removeFolder(50, undefined, { dryRun: true, moduleId: 1 })) as any;
+    expect(r.dryRun).toBe(true);
+    expect(r.includesSubfolders).toBe(true);
+    // P 子树应含 /p/a(P) 和 /p/c/b(P/C),不含 /other
+    expect(r.affectedEndpoints.map((e: any) => e.path).sort()).toEqual(['/p/a', '/p/c/b']);
+  });
+
+  it('不传 moduleId:退化为直接子接口(includesSubfolders=false)', async () => {
+    const r = (await svc().removeFolder(50, undefined, { dryRun: true })) as any;
+    expect(r.includesSubfolders).toBe(false);
+    expect(r.affectedEndpoints.map((e: any) => e.path)).toEqual(['/p/a']); // 只直接归属 50
+  });
+});

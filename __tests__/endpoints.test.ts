@@ -141,3 +141,58 @@ describe('ImportExportService.importOpenAPI 统计校验', () => {
     expect(s.schemaUpdateCount).toBe(1);
   });
 });
+
+const API_LIST = [
+  { id: 1, name: '创建活动', method: 'POST', path: '/activity/create', folderId: 10, description: 'x', requestBody: {} },
+  { id: 2, name: '查询活动', method: 'GET', path: '/activity/list', folderId: 10 },
+  { id: 3, name: '删除券', method: 'POST', path: '/coupon/delete', folderId: 20 },
+];
+
+function listServiceWith(apis: unknown[]): EndpointService {
+  const fake = {
+    request: async () => ({ status: 200, data: { data: apis } }),
+  } as unknown as AxiosInstance;
+  return new EndpointService(new HttpClient(cfg, fake));
+}
+
+describe('EndpointService.search', () => {
+  it('keyword 匹配 name/path,返回精简索引', async () => {
+    const r = await listServiceWith(API_LIST).search(undefined, { keyword: 'activity' });
+    expect(r.map((e) => e.path).sort()).toEqual(['/activity/create', '/activity/list']);
+    expect(Object.keys(r[0]).sort()).toEqual(['folderId', 'id', 'method', 'name', 'path']); // 精简
+  });
+
+  it('method + folderId 过滤', async () => {
+    const r = await listServiceWith(API_LIST).search(undefined, { method: 'post', folderId: 10 });
+    expect(r.map((e) => e.id)).toEqual([1]);
+  });
+
+  it('limit 截断', async () => {
+    const r = await listServiceWith(API_LIST).search(undefined, { limit: 1 });
+    expect(r).toHaveLength(1);
+  });
+});
+
+describe('EndpointService.remove verify', () => {
+  it('删后回查 404 -> 删除成功', async () => {
+    const fake = {
+      request: async (c: AxiosRequestConfig) => {
+        if ((c.method || '').toLowerCase() === 'delete') return { status: 200, data: { data: null } };
+        return { status: 404, data: { errorMessage: 'Not found' } }; // 回查 404
+      },
+    } as unknown as AxiosInstance;
+    const svc = new EndpointService(new HttpClient(cfg, fake));
+    await expect(svc.remove(5, undefined, true)).resolves.toEqual({ deleted: true });
+  });
+
+  it('删后回查遇非404错误(如302) -> 重抛,不误报成功', async () => {
+    const fake = {
+      request: async (c: AxiosRequestConfig) => {
+        if ((c.method || '').toLowerCase() === 'delete') return { status: 200, data: { data: null } };
+        return { status: 302, data: '' }; // 回查 302(端点不可用)
+      },
+    } as unknown as AxiosInstance;
+    const svc = new EndpointService(new HttpClient(cfg, fake));
+    await expect(svc.remove(5, undefined, true)).rejects.toThrowError(ApifoxError);
+  });
+});
