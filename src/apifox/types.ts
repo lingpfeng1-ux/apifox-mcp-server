@@ -41,9 +41,7 @@ export interface FindFolderResult {
 }
 
 export interface ImportSummary {
-  /** Apifox import-data 原始统计返回 */
-  raw: unknown;
-  /** 从统计中归纳出的接口创建/更新数量(用于真实成功校验) */
+  /** 接口创建/更新数量 */
   endpointCreateCount: number;
   endpointUpdateCount: number;
   folderCreateCount: number;

@@ -83,7 +83,6 @@ export class ImportExportService {
     const apiFolder = data?.apiCollection?.folder ?? {};
     const schemaItem = data?.schemaCollection?.item ?? {};
     const summary: ImportSummary = {
-      raw: data,
       endpointCreateCount: Number(apiItem.createCount ?? 0),
       endpointUpdateCount: Number(apiItem.updateCount ?? 0),
       folderCreateCount: Number(apiFolder.createCount ?? 0),

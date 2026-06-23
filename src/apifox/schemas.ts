@@ -14,7 +14,6 @@
 import { HttpClient } from './http';
 import { ApifoxError } from '../errors';
 import { ImportExportService } from './importExport';
-import { ImportSummary } from './types';
 
 export interface DataSchema {
   id: number;
@@ -103,15 +102,33 @@ export class SchemaService {
    * 创建或覆盖一个数据模型(按模型名)。
    * 内部组装最小 OpenAPI(components.schemas)并 import(schemaOverwriteMode="name"),
    * 免去 AI 手搓完整 OpenAPI 包装。同名存在则覆盖更新,不存在则创建。
+   * 返回精简明确结果(含回查到的 id),不暴露 import 的原始统计。
    */
-  async upsert(name: string, jsonSchema: unknown, projectId?: string | number): Promise<ImportSummary> {
+  async upsert(
+    name: string,
+    jsonSchema: unknown,
+    projectId?: string | number
+  ): Promise<{ name: string; id?: number; created: boolean; updated: boolean }> {
     const spec = JSON.stringify({
       openapi: '3.0.1',
       info: { title: 'schema-upsert', version: '1.0.0' },
       paths: {},
       components: { schemas: { [name]: jsonSchema } },
     });
-    return this.importExport.importOpenAPI(spec, { projectId, schemaOverwriteMode: 'name' });
+    const summary = await this.importExport.importOpenAPI(spec, { projectId, schemaOverwriteMode: 'name' });
+    // 回查 id,让调用方拿到模型 id 直接引用,免去再 list 一次
+    let id: number | undefined;
+    try {
+      id = (await this.get(name, projectId)).id;
+    } catch {
+      /* 回查失败不影响主结果 */
+    }
+    return {
+      name,
+      id,
+      created: summary.schemaCreateCount > 0,
+      updated: summary.schemaUpdateCount > 0,
+    };
   }
 
   /**

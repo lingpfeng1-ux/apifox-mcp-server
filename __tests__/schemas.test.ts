@@ -92,20 +92,26 @@ describe('SchemaService.remove', () => {
 });
 
 describe('SchemaService.upsert / update', () => {
-  it('upsert 组装最小 OpenAPI 并带 schemaOverwriteMode=name', async () => {
+  it('upsert 组装最小 OpenAPI 并带 schemaOverwriteMode=name,返回 id/created', async () => {
     let body: any;
     const fake = {
       request: async (c: AxiosRequestConfig) => {
-        body = c.data;
+        const url = c.url || '';
+        // 回查 id 的 GET
+        if ((c.method || 'get').toLowerCase() === 'get' && url.endsWith('/data-schemas')) {
+          return { status: 200, data: { data: [{ id: 999, name: 'UserReq', jsonSchema: {} }] } };
+        }
+        body = c.data; // import 的 POST body
         return { status: 200, data: { data: { schemaCollection: { item: { createCount: 1, updateCount: 0 } } } } };
       },
     } as unknown as AxiosInstance;
     const svc = schemaService(fake);
-    await svc.upsert('UserReq', { type: 'object', required: ['name'] });
+    const r = await svc.upsert('UserReq', { type: 'object', required: ['name'] });
     expect(body.importFormat).toBe('openapi');
     expect(body.schemaOverwriteMode).toBe('name');
-    const spec = JSON.parse(body.data);
-    expect(spec.components.schemas.UserReq).toEqual({ type: 'object', required: ['name'] });
+    expect(JSON.parse(body.data).components.schemas.UserReq).toEqual({ type: 'object', required: ['name'] });
+    // 返回精简明确结果
+    expect(r).toEqual({ name: 'UserReq', id: 999, created: true, updated: false });
   });
 
   it('update 按 id 精确 PUT(带 X-Project-Id),不走按名 import', async () => {
